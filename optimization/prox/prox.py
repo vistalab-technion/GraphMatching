@@ -20,7 +20,7 @@ class ProxParams:
         self.lamb = lamb
 
 
-class base_prox(ABC):
+class ProxBase(ABC):
     """
     base class for proximal operators
     """
@@ -30,7 +30,7 @@ class base_prox(ABC):
         pass
 
 
-class l2_prox(base_prox):
+class ProxL2(ProxBase):
     """
      class for l2 proximal operator
     """
@@ -46,22 +46,22 @@ class l2_prox(base_prox):
             return (1 - lamb / norm_z) * z
 
 
-class l21_prox(base_prox):
+class ProxL21(ProxBase):
     """
      class for l2 proximal operator
     """
 
     def __init__(self):
-        self.l2_prox = l2_prox()
+        self.prox_l2 = ProxL2()
 
     def __call__(self, z: Tensor, lamb: float):
         z_list = []
         for j in range(z.shape[1]):
-            z_list.append(self.l2_prox(z=z[:, j], lamb=lamb))
+            z_list.append(self.prox_l2(z=z[:, j], lamb=lamb))
         return stack(z_list, dim=1)
 
 
-class symmetric_centered_matrix_prox(base_prox):
+class ProxSymmetricCenteredMatrix(ProxBase):
     """
      class for projection on set of symmetric and centered
     """
@@ -84,7 +84,7 @@ class symmetric_centered_matrix_prox(base_prox):
         return self.__double_centering(z_symm)
 
 
-class l21_for_symmetric_centered_matrix_prox(base_prox):
+class ProxL21ForSymmetricCenteredMatrix(ProxBase):
     """
      class for l21_for_symmetric_centered_matrix proximal operator
     """
@@ -99,12 +99,13 @@ class l21_for_symmetric_centered_matrix_prox(base_prox):
         self.maxiter = maxiter
         self.x0 = x0
         self.y0 = y0
-        self.l21_prox = l21_prox()
-        self.symmetric_centered_prox = symmetric_centered_matrix_prox()
+        self.l21_prox = ProxL21()
+        self.symmetric_centered_prox = ProxSymmetricCenteredMatrix()
 
     def __stopping_condition(self, x, y):
         r = torch.norm(x - y, p='fro')
         return r, r < self.tol
+
     def __call__(self, lamb: float, z: Tensor):
 
         converged = False
@@ -128,6 +129,9 @@ class l21_for_symmetric_centered_matrix_prox(base_prox):
             nu = nu + (y - x)
             r, converged = self.__stopping_condition(x, y)
             counter += 1
+            # TODO: this loss is wrong,
+            #  need to change the computed loss to be
+            #  the augmented Lagrangian
             loss.append(torch.norm(x - z, p='fro') ** 2 + (1 / (2 * lamb)) * l21(z))
             if np.mod(counter, 10) == 0:
                 # plt.loglog(loss)
@@ -141,7 +145,7 @@ if __name__ == '__main__':
     n = 5
     z = torch.rand(n, 1)
     lamb = 1.0
-    my_l2_prox = l2_prox()
+    my_l2_prox = ProxL2()
     z_prox = my_l2_prox(z=z, lamb=lamb)
     z = z / torch.norm(z)
     z_prox = my_l2_prox(z=z, lamb=lamb)
@@ -150,18 +154,18 @@ if __name__ == '__main__':
 
     # test l21 prox
     Z = torch.rand(n, n)
-    my_l21prox = l21_prox()
+    my_l21prox = ProxL21()
     Z_prox = my_l21prox(z=Z, lamb=lamb)
     print(f"l21 prox {Z_prox}")
 
     # test symmetric centered prox
-    my_symm_centered_prox = symmetric_centered_matrix_prox()
+    my_symm_centered_prox = ProxSymmetricCenteredMatrix()
     Z_prox = my_symm_centered_prox(z=Z)
     print(f"symmetric centered {Z_prox}")
 
     # test symmetric centered prox
     rho = 0.2
-    my_l21_for_symmetric_centered_matrix_prox = l21_for_symmetric_centered_matrix_prox(
-        rho=rho,  maxiter=3000)
+    my_l21_for_symmetric_centered_matrix_prox = ProxL21ForSymmetricCenteredMatrix(
+        rho=rho, maxiter=3000)
     Z_prox = my_l21_for_symmetric_centered_matrix_prox(z=Z, lamb=lamb)
     print(f"l21 on symmetric centered {Z_prox}")
