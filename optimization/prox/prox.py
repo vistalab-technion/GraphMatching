@@ -4,6 +4,7 @@ from logging import exception
 import numpy as np
 from torch import stack
 
+import cvxpy as cp
 import torch
 from torch import Tensor
 import matplotlib.pyplot as plt
@@ -12,6 +13,10 @@ import matplotlib.pyplot as plt
 def l21(z: Tensor):
     l21norm = sum([torch.norm(z[:, j], p=2) for j in range(z.shape[1])])
     return l21norm
+
+
+def l21_prox_loss(x, z, lamb):
+    return (1 / (2 * lamb)) * torch.norm(x - z, p='fro') ** 2 + l21(x)
 
 
 @abstractmethod
@@ -25,6 +30,9 @@ class ProxBase(ABC):
     base class for proximal operators
     """
 
+    def __init__(self, solver=""):
+        self.solver = solver
+
     @abstractmethod
     def __call__(self, z: Tensor, lamb: float):
         pass
@@ -35,8 +43,8 @@ class ProxL2(ProxBase):
      class for l2 proximal operator
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
 
     def __call__(self, z: Tensor, lamb: float):
         norm_z = torch.norm(z, p="fro")
@@ -51,10 +59,17 @@ class ProxL21(ProxBase):
      class for l2 proximal operator
     """
 
-    def __init__(self):
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
         self.prox_l2 = ProxL2()
 
     def __call__(self, z: Tensor, lamb: float):
+        if self.solver == "cvx":
+            return self._cvx_prox(z=z, lamb=lamb)
+        else:
+            return self._prox(z=z, lamb=lamb)
+
+    def _prox(self, z: Tensor, lamb: float):
         z_list = []
         for j in range(z.shape[1]):
             z_list.append(self.prox_l2(z=z[:, j], lamb=lamb))
@@ -65,6 +80,9 @@ class ProxSymmetricCenteredMatrix(ProxBase):
     """
      class for projection on set of symmetric and centered
     """
+
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
 
     @staticmethod
     def __double_centering(x):
@@ -78,6 +96,12 @@ class ProxSymmetricCenteredMatrix(ProxBase):
         return dc_x
 
     def __call__(self, z: Tensor, lamb: float = 0):
+        if self.solver == "cvx":
+            return self._cvx_prox(z=z, lamb=lamb)
+        else:
+            return self._prox(z=z, lamb=lamb)
+
+    def _prox(self, z: Tensor, lamb: float = 0):
         if z.shape[0] != z.shape[1]:
             raise exception('matrix has to be square')
         z_symm = 0.5 * (z + z.T)
@@ -89,11 +113,15 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
      class for l21_for_symmetric_centered_matrix proximal operator
     """
 
-    def __init__(self, rho: float,
+    def __init__(self, rho: float = 1,
                  tol: float = 1e-6,
                  maxiter: int = 1000,
                  x0: Optional = None,
-                 y0: Optional = None):
+                 y0: Optional = None,
+                 solver=""):
+
+        super().__init__(solver=solver)
+
         self.rho = rho
         self.tol = tol
         self.maxiter = maxiter
@@ -106,7 +134,13 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
         r = torch.norm(x - y, p='fro')
         return r, r < self.tol
 
-    def __call__(self, lamb: float, z: Tensor):
+    def __call__(self, z: Tensor, lamb: float = 0):
+        if self.solver == "cvx":
+            return self._cvx_prox(z=z, lamb=lamb)
+        else:
+            return self._prox(z=z, lamb=lamb)
+
+    def _prox(self, lamb: float, z: Tensor):
 
         converged = False
         counter = 0
@@ -132,12 +166,25 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
             # TODO: this loss is wrong,
             #  need to change the computed loss to be
             #  the augmented Lagrangian
-            loss.append(torch.norm(x - z, p='fro') ** 2 + (1 / (2 * lamb)) * l21(z))
+            loss.append((1 / (2 * lamb)) * torch.norm(x - z, p='fro') ** 2 + l21(z))
             if np.mod(counter, 10) == 0:
                 # plt.loglog(loss)
                 # plt.show()
                 print(f'counter: {counter}, loss: {loss[-1]}, r: {r}')
         return x
+
+    def _cvx_prox(self, lamb: float, z: Tensor):
+        z = z.numpy()
+        x = cp.Variable(z.shape)
+        ones = np.ones([z.shape[0], 1])
+        zeros = 0 * ones
+        prob = cp.Problem(cp.Minimize(
+            cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
+            [x @ ones == zeros,
+             x == x.T])
+        prob.solve()
+        print(f"cvx min value {prob.value}")
+        return x.value
 
 
 if __name__ == '__main__':
@@ -164,8 +211,17 @@ if __name__ == '__main__':
     print(f"symmetric centered {Z_prox}")
 
     # test symmetric centered prox
-    rho = 0.2
+    rho = 0.001
     my_l21_for_symmetric_centered_matrix_prox = ProxL21ForSymmetricCenteredMatrix(
-        rho=rho, maxiter=3000)
-    Z_prox = my_l21_for_symmetric_centered_matrix_prox(z=Z, lamb=lamb)
+        rho=rho, maxiter=50000, tol=1e-6)
+    Z_prox = my_l21_for_symmetric_centered_matrix_prox(z=Z.type(torch.DoubleTensor), lamb=lamb)
+    cvx_l21_for_symmetric_centered_matrix_prox = ProxL21ForSymmetricCenteredMatrix(
+        rho=rho, maxiter=50000, solver="cvx")
+    Z_prox_cvx = cvx_l21_for_symmetric_centered_matrix_prox(z=Z, lamb=lamb)
     print(f"l21 on symmetric centered {Z_prox}")
+    print(f"l21 on symmetric centered cvx{Z_prox_cvx}")
+
+    loss_my_solver = l21_prox_loss(Z_prox, Z, lamb)
+    loss_cvx_solver = l21_prox_loss(torch.tensor(Z_prox_cvx), Z, lamb)
+    print(f"l21 on symmetric centered loss "
+          f"{loss_my_solver} vs cvx loss {loss_cvx_solver}")
