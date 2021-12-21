@@ -202,8 +202,8 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
             #  the augmented Lagrangian
             loss.append((1 / (2 * lamb)) * torch.norm(x - z, p='fro') ** 2 + l21(z))
             if np.mod(counter, 50) == 0:
-                pbar.update(50)
-                # print(f'counter: {counter}, loss: {loss[-1]}, r: {r}')
+                #pbar.update(50)
+                print(f'counter: {counter}, loss: {loss[-1]}, r: {r}')
 
         pbar.close()
         return x
