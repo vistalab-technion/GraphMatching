@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+numpy = "*"
+networkx = "*"
+scipy = "*"
+matplotlib = "*"
+jax = "*"
+cvxpy = "*"
+torch = "*"
+cvx = "*"
+proxmin = "*"
+tqdm = "*"
+pyproximal = "*"
+pytest = "*"
+
+[dev-packages]
+pytest = "*"
