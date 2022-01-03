@@ -189,7 +189,7 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
             y = self.y0
         else:
             y = z
-        pbar = tqdm(total = self.maxiter)
+        pbar = tqdm(total=self.maxiter)
         while not converged and (counter <= self.maxiter):
             w = t * z + (1 - t) * (y + nu)
             x = self.l21_prox(z=w, lamb=mu)
@@ -202,7 +202,7 @@ class ProxL21ForSymmetricCenteredMatrix(ProxBase):
             #  the augmented Lagrangian
             loss.append((1 / (2 * lamb)) * torch.norm(x - z, p='fro') ** 2 + l21(z))
             if np.mod(counter, 50) == 0:
-                #pbar.update(50)
+                # pbar.update(50)
                 print(f'counter: {counter}, loss: {loss[-1]}, r: {r}')
 
         pbar.close()
@@ -229,10 +229,12 @@ if __name__ == '__main__':
     my_l2_prox = ProxL2()
     my_l2_prox_cvx = ProxL2(solver="cvx")
     z_prox = my_l2_prox(z=z, lamb=lamb)
-    z_prox_cvx = my_l2_prox(z=z, lamb=lamb)
+    z_prox_cvx = my_l2_prox_cvx(z=z, lamb=lamb)
     print(f"l2 prox {z_prox}")
     print(f"l2 prox  cvx {z_prox_cvx}")
-
+    assert torch.isclose(torch.norm(z_prox - z_prox_cvx).type(torch.FloatTensor),
+                         torch.zeros(1),
+                         1e-3, 1e-2)
     z = z / torch.norm(z)
     z_prox = my_l2_prox(z=z, lamb=lamb)
     print(f"l2 prox {z_prox}")
@@ -246,7 +248,9 @@ if __name__ == '__main__':
     Z_prox_cvx = my_l21prox_cvx(z=Z, lamb=lamb)
     print(f"l21 prox {Z_prox}")
     print(f"l21 prox cvx{Z_prox_cvx}")
-
+    assert torch.isclose(torch.norm(Z_prox - Z_prox_cvx).type(torch.FloatTensor),
+                         torch.zeros(1),
+                         1e-3, 1e-2)
     # test symmetric centered prox
     my_symm_centered_prox = ProxSymmetricCenteredMatrix()
     Z_prox = my_symm_centered_prox(z=Z)
@@ -255,7 +259,9 @@ if __name__ == '__main__':
     Z_prox_cvx = my_symm_centered_prox_cvx(z=Z)
     print(f"symmetric centered {Z_prox}")
     print(f"symmetric centered {Z_prox_cvx}")
-
+    assert torch.isclose(torch.norm(Z_prox - Z_prox_cvx).type(torch.FloatTensor),
+                         torch.zeros(1),
+                         1e-3, 1e-2)
     # test symmetric centered prox
     rho = 0.001
     my_l21_for_symmetric_centered_matrix_prox = ProxL21ForSymmetricCenteredMatrix(
@@ -267,8 +273,10 @@ if __name__ == '__main__':
     Z_prox_cvx = my_l21_for_symmetric_centered_matrix_prox_cvx(z=Z, lamb=lamb)
     print(f"l21 on symmetric centered {Z_prox}")
     print(f"l21 on symmetric centered cvx{Z_prox_cvx}")
-
     loss_my_solver = l21_prox_loss(Z_prox, Z, lamb)
     loss_cvx_solver = l21_prox_loss(Z_prox_cvx, Z, lamb)
     print(f"l21 on symmetric centered loss "
           f"{loss_my_solver} vs cvx loss {loss_cvx_solver}")
+    assert torch.isclose(torch.norm(Z_prox - Z_prox_cvx).type(torch.FloatTensor),
+                         torch.zeros(1),
+                         1e-3, 1e-2)
