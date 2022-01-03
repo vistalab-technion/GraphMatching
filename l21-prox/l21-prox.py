@@ -17,7 +17,7 @@ import opt_helpers as oh
 
 def main():
     # numbers of edges connecting part and graph
-    n_con = 4
+    n_con = 7
 
     # full graph including the part
     full_graph = 'data/can_processed_' + str(n_con) + '.txt'
@@ -86,21 +86,32 @@ def main():
             v[i]=10;
     E = np.zeros((379, 379))
 
-    E[169,248]=1.0
-    E[169,122]=1.0
-    E[169,67]=1.0
-    E[169,49]=1.0
-    E[100,67]=1.0
-    E[209,185]=1.0
-    E[65,214]=1.0
-
-    E[248] = 1.0
-    E[122] = 1.0
-    E[67] = 1.0
+    E[169, 248] = 1.0
+    E[169, 122] = 1.0
+    E[169, 67] = 1.0
     E[169, 49] = 1.0
     E[100, 67] = 1.0
     E[209, 185] = 1.0
     E[65, 214] = 1.0
+
+    E[248, 169] = 1.0
+    E[122, 169] = 1.0
+    E[67, 169] = 1.0
+    E[49, 169] = 1.0
+    E[67, 100] = 1.0
+    E[185, 209] = 1.0
+    E[214, 65] = 1.0
+
+    E[169, 169] = -4.0
+    E[100, 100] = -1.0
+    E[248, 248] = -1.0
+    E[122, 122] = -1.0
+    E[67, 67] = -2.0
+    E[49, 49] = -1.0
+    E[209, 209] = -1.0
+    E[185, 185] = -1.0
+    E[214, 214] = -1.0
+    E[65, 65] = -1.0
 
     objective_v(v, E, D_part, L_full, evnr, mu)
     print(objective_E(E, v, D_part, L_full, evnr, mu))
@@ -138,7 +149,7 @@ def objective_v(v, E, D_part, L_full, evnr, mu):
 
 
 def objective_E(E, v, D_part, L_full, evnr, mu):
-    # gr_size=int(np.sqrt(np.shape(v)))
+    gr_size=np.shape(v)[0]
     # x=nnp.reshape(v,(gr_size,gr_size))
 
     gr_part=np.shape(D_part)[0]
@@ -149,7 +160,17 @@ def objective_E(E, v, D_part, L_full, evnr, mu):
     D_hamm = (D_ham[0:gr_part])
     diag_x = nnp.diag(x)
 
-    loss = nnp.power((D_hamm[0:evnr] - D_part[0:evnr]), 2).sum() + mu * (diag_x.transpose() @ L_full @ diag_x)
+
+
+    cur_l2=nnp.sum(nnp.power(E, 2),0)
+    l2=nnp.sqrt(cur_l2)
+    l21=nnp.sum(l2)
+
+
+    print(l21)
+    print("l21: %f" %(l21))
+
+    loss = nnp.power((D_hamm[0:evnr] - D_part[0:evnr]), 2).sum() + mu * (diag_x.transpose() @ L_full @ diag_x)+l21
 
     return loss
 
@@ -224,7 +245,7 @@ def grad_descent(rho,v,E,D_part, L_full, evnr, mu):
 
 def solve_E_v(rho,v,E,D_part, L_full, evnr, mu,lamb,nu):
 
-    for i in range(0,100):
+    for i in range(0,10):
         E_cur=E
         print(i)
         E_cur,nu=prox_grad(rho,v,E_cur,D_part, L_full, evnr, mu,lamb,nu)
