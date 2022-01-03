@@ -4,11 +4,15 @@ import numpy as np
 from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL2
 from tests.optimization.conftest import BaseTestOptimization
+import pytest
 
 
 class TestProx(BaseTestOptimization):
-
-    def test_prox_grad(self, n=5, lamb=0.1):
+    @pytest.mark.parametrize(
+        "nesterov",
+        (False, True)
+    )
+    def test_prox_grad(self, nesterov):
         # define some simple problem, e.g. min ||Ax-b||^2+mu*||x||_2
         A = torch.randn([5, 10])
         x_gt = torch.randn(10)
@@ -19,7 +23,14 @@ class TestProx(BaseTestOptimization):
         mu = 0.2
         lamb = 0.1
         lr = 0.0001
-        pgm = PGM(params=[x], proxs=[l2prox], lr=lr)
+        momentum = 0.1
+        dampening = 0
+        pgm = PGM(params=[x],
+                  proxs=[l2prox],
+                  lr=lr,
+                  momentum=momentum,
+                  dampening=dampening,
+                  nesterov=nesterov)
         loss_fuction = lambda x: torch.norm(A @ x - y) ** 2 + mu * torch.norm(x)
         loss_vals = []
         for i in range(maxiter):
@@ -36,6 +47,8 @@ class TestProx(BaseTestOptimization):
         prob.solve()
         x_cvx_opt = torch.tensor(x_cvx.value).type(torch.FloatTensor)
         error_x = torch.norm(x.detach() - x_cvx_opt).type(torch.FloatTensor)
-        error_loss = torch.norm(loss_fuction(x.detach()) - loss_fuction(x_cvx_opt)).type(torch.FloatTensor)
+        error_loss = torch.norm(
+            loss_fuction(x.detach()) - loss_fuction(x_cvx_opt)).type(torch.FloatTensor)
+
         assert torch.isclose(error_x, torch.zeros(1), 1e-3, 1e-2)
         assert torch.isclose(error_loss, torch.zeros(1), 1e-3, 1e-2)
