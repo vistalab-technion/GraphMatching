@@ -7,7 +7,7 @@ import torch
 
 class TestProx(BaseTestOptimization):
 
-    def test_l21prox(self, n=5, lamb=0.1):
+    def test_l2prox(self, n=5, lamb=0.1):
         z = torch.rand(n, 1)
         my_l2_prox = ProxL2()
         my_l2_prox_cvx = ProxL2(solver="cvx")

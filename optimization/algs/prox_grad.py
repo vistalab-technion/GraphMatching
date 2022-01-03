@@ -1,9 +1,17 @@
+from numpy import iterable
+from torch import Tensor
 from torch.optim.sgd import SGD
 
 
 class PGM(SGD):
-    def __init__(self, params, proxs, lr=0.2, momentum=0, dampening=0,
-                 nesterov=False):
+    def __init__(self,
+                 params,
+                 proxs,
+                 lr: float = 0.2,
+                 momentum: float = 0,
+                 dampening: float = 0,
+                 nesterov: bool = False):
+
         kwargs = dict(lr=lr, momentum=momentum, dampening=dampening, weight_decay=0,
                       nesterov=nesterov)
         super().__init__(params, **kwargs)
@@ -16,7 +24,7 @@ class PGM(SGD):
         for group, prox in zip(self.param_groups, list(proxs)):
             group.setdefault('prox', prox)
 
-    def step(self, closure=None):
+    def step(self, lamb, closure=None):
         # this performs a gradient step
         # optionally with momentum or nesterov acceleration
         super().step(closure=closure)
@@ -26,4 +34,4 @@ class PGM(SGD):
 
             # here we apply the proximal operator to each parameter in a group
             for p in group['params']:
-                p.data = prox(p.data)
+                p.data = prox(z=p.data, lamb=lamb)
