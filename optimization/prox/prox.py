@@ -9,6 +9,8 @@ import torch
 from torch import Tensor
 import matplotlib.pyplot as plt
 
+from tests.optimization.util import double_centering
+
 
 def l21(z: Tensor):
     l21norm = sum([torch.norm(z[:, j], p=2) for j in range(z.shape[1])])
@@ -36,6 +38,18 @@ class ProxBase(ABC):
     @abstractmethod
     def __call__(self, z: Tensor, lamb: float):
         pass
+
+
+class ProxId(ProxBase):
+    """
+    Identity prox (pass through)
+    """
+
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
+
+    def __call__(self, z: Tensor, lamb: float):
+        return z
 
 
 class ProxL2(ProxBase):
@@ -108,14 +122,7 @@ class ProxSymmetricCenteredMatrix(ProxBase):
 
     @staticmethod
     def __double_centering(x):
-        n = x.shape[0]
-        row_sum = torch.sum(x, dim=0).unsqueeze(0)
-        col_sum = torch.sum(x, dim=1).unsqueeze(1)
-        all_sum = sum(col_sum)
-        dc_x = x - (1 / n) * (
-                Tensor.repeat(row_sum, n, 1) + Tensor.repeat(col_sum, 1, n)) + (
-                       1 / n ** 2) * all_sum
-        return dc_x
+        return double_centering(x)
 
     def __call__(self, z: Tensor, lamb: float = 0):
         if self.solver == "cvx":
@@ -141,7 +148,7 @@ class ProxSymmetricCenteredMatrix(ProxBase):
         return torch.tensor(x.value)
 
 
-class ProxL21ForSymmetricCenteredMatrix(ProxBase):
+class ProxL21ForSymmetricCenteredMatrix(ProxSymmetricCenteredMatrix):
     """
      class for l21_for_symmetric_centered_matrix proximal operator
     """
