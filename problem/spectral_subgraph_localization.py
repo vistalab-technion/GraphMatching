@@ -5,26 +5,27 @@ import matplotlib.pyplot as plt
 from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
     ProxSymmetricCenteredMatrix, ProxId
-from tests.optimization.util import double_centering
+from tests.optimization.util import double_centering, set_diag_zero
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def spectrum_alignment_term(ref_spectrum, L, E, v):
-    k = ref_spectrum.shape[0]
-    L_edited = L + E + torch.diag(v)
-    spectrum = torch.linalg.eigvalsh(L_edited)
-    loss = torch.norm(spectrum[0:k] - ref_spectrum) ** 2
-    return loss
+def block_stochastic_graph(n1, n2):
+    p11 = set_diag_zero(0.7 * torch.ones(n1, n1))
+
+    p22 = set_diag_zero(0.7 * torch.ones(n2, n2))
+
+    p12 = 0.1 * torch.ones(n1, n2)
+
+    p = torch.zeros([n, n])
+    p[0:n1, 0:n1] = p11
+    p[0:n1, n1:n] = p12
+    p[n1:n, n1:n] = p22
+    p[n1:n, 0:n1] = p12.T
+
+    return p
 
 
-def MSreg(L, E, v):
-    return v.T @ (L + E) @ v
-
-
-def dc(x):
-    ProxSymmetricCenteredMatrix(x)
-
-
-class SubgrapIsomorphismSolver():
+class SubgraphIsomorphismSolver:
 
     def __init__(self, L, ref_spectrum):
         self.L = L
@@ -44,7 +45,9 @@ class SubgrapIsomorphismSolver():
 
         maxiter = 1000
         mu_l21 = 1
-        mu_MS = 0# 0.1
+        mu_MS = 0.2
+        mu_trace = 0
+
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
         lr = 0.2
@@ -58,7 +61,8 @@ class SubgrapIsomorphismSolver():
                   dampening=dampening,
                   nesterov=False)
         smooth_loss_fuction = lambda ref, L, E, v: \
-            spectrum_alignment_term(ref, L, E, v) + mu_MS * MSreg(L, E, v)
+            self.spectrum_alignment_term(ref, L, E, v)\
+            + mu_MS * self.MSreg(L, E, v) + mu_trace*self.trace_reg(E,n)
 
         non_smooth_loss_function = lambda E: mu_l21 * l21(E)
         full_loss_function = lambda ref, L, E, v: \
@@ -90,23 +94,68 @@ class SubgrapIsomorphismSolver():
         print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
         return v, E
 
+    @staticmethod
+    def spectrum_alignment_term(ref_spectrum, L, E, v):
+        k = ref_spectrum.shape[0]
+        Hamiltonian = L + E + torch.diag(v)
+        spectrum = torch.linalg.eigvalsh(Hamiltonian)
+        loss = torch.norm(spectrum[0:k] - ref_spectrum) ** 2
+        return loss
+
+    @staticmethod
+    def MSreg(L, E, v):
+        return v.T @ (L + E) @ v
+
+    @staticmethod
+    def trace_reg(E, n):
+        return (torch.trace(E) - n) ** 2
+
+    @staticmethod
+    def dc(x):
+        ProxSymmetricCenteredMatrix(x)
+
     def plots(self):
         plt.loglog(self.loss_vals, 'b')
         plt.title('full loss')
         plt.xlabel('iter')
         plt.show()
 
-        plt.imshow(self.E)
-        plt.title('E')
+        ax = plt.subplot()
+        im = ax.imshow(self.E)
+        divider = make_axes_locatable(ax)
+        ax.set_title('E')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        plt.show()
+
+        ax = plt.subplot()
+        L_edited = self.E+self.L.numpy()
+        im = ax.imshow(L_edited)
+        divider = make_axes_locatable(ax)
+        ax.set_title('L+E')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        plt.show()
+
+        ax = plt.subplot()
+        A_edited = -set_diag_zero(self.E+self.L.numpy())
+        im = ax.imshow(A_edited)
+        divider = make_axes_locatable(ax)
+        ax.set_title('A edited')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
         plt.show()
 
         plt.plot(np.sort(self.v), 'r')
         plt.title('v')
         plt.show()
 
-        plt.plot(self.ref_spectrum.numpy(), 'og')
-        plt.plot(self.spectrum, 'xr')
-        plt.title('ref spect vs spect')
+        ax = plt.subplot()
+        im = ax.imshow(np.diag(self.v))
+        divider = make_axes_locatable(ax)
+        ax.set_title('diag(v)')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
         plt.show()
 
         plt.plot(self.ref_spectrum.numpy(), 'og')
@@ -116,18 +165,26 @@ class SubgrapIsomorphismSolver():
 
 
 if __name__ == '__main__':
-    torch.manual_seed(0)
+    torch.manual_seed(10)
 
-    n = 20
-    A = torch.randint(2, [n, n])
-    A = 0.5 * (A + A.T)
+    n1 = 5
+    n2 = 15
+    n = n1 + n2
+    p = block_stochastic_graph(n1, n2)
+
+    A = torch.tril(torch.bernoulli(p))
+    A = (A + A.T)
     D = torch.diag(A.sum(dim=1))
     L = D - A
 
-    A_sub = A[1:5, 1:5]
+    plt.imshow(A)
+    plt.title('A')
+    plt.show()
+
+    A_sub = A[0:n1, 0:n1]
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    subgraph_isomorphism_solver = SubgrapIsomorphismSolver(L, ref_spectrum)
+    subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
