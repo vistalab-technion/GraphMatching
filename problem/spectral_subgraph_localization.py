@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from numpy import histogram
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from optimization.algs.prox_grad import PGM
@@ -7,6 +8,8 @@ from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
     ProxSymmetricCenteredMatrix, ProxId
 from tests.optimization.util import double_centering, set_diag_zero
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.cluster.vq import kmeans2
+from skimage.filters.thresholding import threshold_otsu
 
 
 def block_stochastic_graph(n1, n2):
@@ -45,7 +48,7 @@ class SubgraphIsomorphismSolver:
 
         maxiter = 1000
         mu_l21 = 1
-        mu_MS = 0.2
+        mu_MS = 0.3
         mu_trace = 0
 
         # s = torch.linalg.svdvals(A)
@@ -61,8 +64,8 @@ class SubgraphIsomorphismSolver:
                   dampening=dampening,
                   nesterov=False)
         smooth_loss_fuction = lambda ref, L, E, v: \
-            self.spectrum_alignment_term(ref, L, E, v)\
-            + mu_MS * self.MSreg(L, E, v) + mu_trace*self.trace_reg(E,n)
+            self.spectrum_alignment_term(ref, L, E, v) \
+            + mu_MS * self.MSreg(L, E, v) + mu_trace * self.trace_reg(E, n)
 
         non_smooth_loss_function = lambda E: mu_l21 * l21(E)
         full_loss_function = lambda ref, L, E, v: \
@@ -110,10 +113,6 @@ class SubgraphIsomorphismSolver:
     def trace_reg(E, n):
         return (torch.trace(E) - n) ** 2
 
-    @staticmethod
-    def dc(x):
-        ProxSymmetricCenteredMatrix(x)
-
     def plots(self):
         plt.loglog(self.loss_vals, 'b')
         plt.title('full loss')
@@ -129,7 +128,7 @@ class SubgraphIsomorphismSolver:
         plt.show()
 
         ax = plt.subplot()
-        L_edited = self.E+self.L.numpy()
+        L_edited = self.E + self.L.numpy()
         im = ax.imshow(L_edited)
         divider = make_axes_locatable(ax)
         ax.set_title('L+E')
@@ -138,7 +137,7 @@ class SubgraphIsomorphismSolver:
         plt.show()
 
         ax = plt.subplot()
-        A_edited = -set_diag_zero(self.E+self.L.numpy())
+        A_edited = -set_diag_zero(self.E + self.L.numpy())
         im = ax.imshow(A_edited)
         divider = make_axes_locatable(ax)
         ax.set_title('A edited')
@@ -158,6 +157,20 @@ class SubgraphIsomorphismSolver:
         plt.colorbar(im, cax=cax)
         plt.show()
 
+        ax = plt.subplot()
+        #_, v_clustered = kmeans2(self.v, 2, minit='points')
+        v = self.v - np.min(self.v)
+        v = v / np.max(v)
+        threshold = threshold_otsu(v, nbins=10)
+        v_clustered = (v>threshold).astype(float)
+
+        im = ax.imshow(np.diag(v_clustered))
+        divider = make_axes_locatable(ax)
+        ax.set_title('diag(v_clustered)')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        plt.show()
+
         plt.plot(self.ref_spectrum.numpy(), 'og')
         plt.plot(self.spectrum, 'xr')
         plt.title('ref spect vs spect')
@@ -165,7 +178,9 @@ class SubgraphIsomorphismSolver:
 
 
 if __name__ == '__main__':
-    torch.manual_seed(10)
+
+
+    #torch.manual_seed(12)
 
     n1 = 5
     n2 = 15
@@ -188,3 +203,4 @@ if __name__ == '__main__':
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
+

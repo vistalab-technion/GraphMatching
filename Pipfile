@@ -17,6 +17,7 @@ proxmin = "*"
 tqdm = "*"
 pyproximal = "*"
 pytest = "*"
+scikit-image = "*"
 
 [dev-packages]
 pytest = "*"
