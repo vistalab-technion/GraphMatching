@@ -48,12 +48,12 @@ class SubgraphIsomorphismSolver:
 
         maxiter = 1000
         mu_l21 = 1
-        mu_MS = 0.3
+        mu_MS = 1
         mu_trace = 0
 
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
-        lr = 0.2
+        lr = 0.02
         lamb = mu_l21 * lr  # This setting is important!
         momentum = 0.1
         dampening = 0
@@ -145,7 +145,7 @@ class SubgraphIsomorphismSolver:
         plt.colorbar(im, cax=cax)
         plt.show()
 
-        plt.plot(np.sort(self.v), 'r')
+        plt.plot(np.sort(self.v), 'xr')
         plt.title('v')
         plt.show()
 
@@ -158,11 +158,11 @@ class SubgraphIsomorphismSolver:
         plt.show()
 
         ax = plt.subplot()
-        #_, v_clustered = kmeans2(self.v, 2, minit='points')
+        # _, v_clustered = kmeans2(self.v, 2, minit='points')
         v = self.v - np.min(self.v)
         v = v / np.max(v)
         threshold = threshold_otsu(v, nbins=10)
-        v_clustered = (v>threshold).astype(float)
+        v_clustered = (v > threshold).astype(float)
 
         im = ax.imshow(np.diag(v_clustered))
         divider = make_axes_locatable(ax)
@@ -178,9 +178,7 @@ class SubgraphIsomorphismSolver:
 
 
 if __name__ == '__main__':
-
-
-    #torch.manual_seed(12)
+    # torch.manual_seed(12)
 
     n1 = 5
     n2 = 15
@@ -203,4 +201,3 @@ if __name__ == '__main__':
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
-
