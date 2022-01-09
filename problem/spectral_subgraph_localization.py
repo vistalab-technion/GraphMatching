@@ -11,13 +11,22 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
 
+import kmeans1d
 
-def block_stochastic_graph(n1, n2):
-    p11 = set_diag_zero(0.7 * torch.ones(n1, n1))
+x = [4.0, 4.1, 4.2, -50, 200.2, 200.4, 200.9, 80, 100, 102]
+k = 4
 
-    p22 = set_diag_zero(0.7 * torch.ones(n2, n2))
+clusters, centroids = kmeans1d.cluster(x, k)
 
-    p12 = 0.1 * torch.ones(n1, n2)
+print(clusters)   # [1, 1, 1, 0, 3, 3, 3, 2, 2, 2]
+print(centroids)  # [-50.0, 4.1, 94.0, 200.5]
+
+def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
+    p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
+
+    p22 = set_diag_zero(p_parts * torch.ones(n2, n2))
+
+    p12 = p_off * torch.ones(n1, n2)
 
     p = torch.zeros([n, n])
     p[0:n1, 0:n1] = p11
@@ -46,14 +55,14 @@ class SubgraphIsomorphismSolver:
         E = torch.zeros([n, n], dtype=torch.float64)
         E = double_centering(0.5 * (E + E.T)).requires_grad_()
 
-        maxiter = 1000
+        maxiter = 100
         mu_l21 = 1
-        mu_MS = 1
+        mu_MS = 0.3
         mu_trace = 0
 
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
-        lr = 0.02
+        lr = 0.2
         lamb = mu_l21 * lr  # This setting is important!
         momentum = 0.1
         dampening = 0
@@ -162,11 +171,22 @@ class SubgraphIsomorphismSolver:
         v = self.v - np.min(self.v)
         v = v / np.max(v)
         threshold = threshold_otsu(v, nbins=10)
-        v_clustered = (v > threshold).astype(float)
+        v_otsu = (v > threshold).astype(float)
+        im = ax.imshow(np.diag(v_otsu))
+        divider = make_axes_locatable(ax)
+        ax.set_title('diag(v_otsu)')
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        plt.show()
 
+        ax = plt.subplot()
+        # _, v_clustered = kmeans2(self.v, 2, minit='points')
+        v = self.v - np.min(self.v)
+        v = v / np.max(v)
+        v_clustered, centroids = kmeans1d.cluster(v, k=2)
         im = ax.imshow(np.diag(v_clustered))
         divider = make_axes_locatable(ax)
-        ax.set_title('diag(v_clustered)')
+        ax.set_title('diag(v_kmeans)')
         cax = divider.append_axes("right", size="5%", pad=0.05)
         plt.colorbar(im, cax=cax)
         plt.show()
@@ -183,7 +203,7 @@ if __name__ == '__main__':
     n1 = 5
     n2 = 15
     n = n1 + n2
-    p = block_stochastic_graph(n1, n2)
+    p = block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.05)
 
     A = torch.tril(torch.bernoulli(p))
     A = (A + A.T)
