@@ -177,6 +177,54 @@ class SubgraphIsomorphismSolver:
         plt.title('ref spect vs spect')
         plt.show()
 
+    def plots_on_graph(self,A):
+        vmin = np.min(self.v)
+        vmax = np.max(self.v)
+
+        G = nx.from_numpy_matrix(A)
+        pos = nx.spring_layout(G)
+        # pos = nx.spring_layout(G)
+        # plt.rcParams["figure.figsize"] = (20,20)
+
+        # for edge in G.edges():
+
+
+        for u, w, d in G.edges(data=True):
+            d['weight'] = self.E[u, w]
+
+        edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+
+        cmap = plt.cm.gnuplot
+        nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap, node_size=30,
+                pos=pos)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm._A = []
+        plt.colorbar(sm)
+        plt.title('Nodes colored by potential v')
+        #  plt.savefig(file+'.png')
+        plt.show()
+
+        vmin = np.min(weights)
+        vmax = np.max(weights)
+        subset_nodes=range(n1)
+       # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
+
+        color_map = []
+        for node in G:
+            if node in subset_nodes:
+                color_map.append('blue')
+            else:
+                color_map.append('green')
+        cmap = plt.cm.gnuplot
+        nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0, edge_cmap=cmap, vmin=vmin,
+                vmax=vmax, cmap=cmap, node_size=30, pos=pos)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm._A = []
+        plt.colorbar(sm)
+        plt.title('Edges colored by E')
+        #  plt.savefig(file+'.png')
+        plt.show()
+
 def edgelist_to_adjmatrix(edgeList_file):
     edge_list = np.loadtxt(edgeList_file, usecols=range(2))
 
@@ -213,8 +261,8 @@ if __name__ == '__main__':
     n = n1 + n2
     p = block_stochastic_graph(n1, n2)
     print(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'.txt')
-    A = torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'_full.txt'))
-    #A = torch.tril(torch.bernoulli(p))
+    #A = torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'_full.txt'))
+    A = torch.tril(torch.bernoulli(p))
     A = (A + A.T)
     D = torch.diag(A.sum(dim=1))
     L = D - A
@@ -240,61 +288,17 @@ if __name__ == '__main__':
     plt.title('A')
     plt.show()
 
-    #A_sub = A[0:n1, 0:n1]
-    A_sub=torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_part.txt'))
+    A_sub = A[0:n1, 0:n1]
+    #A_sub=torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_part.txt'))
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
+    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int))
 
 
-    vmin=np.min(v.detach().numpy())
-    vmax = np.max(v.detach().numpy())
 
-    G = nx.from_numpy_matrix(A.detach().numpy().astype(int))
-    pos = nx.spring_layout(G)
-    # pos = nx.spring_layout(G)
-    # plt.rcParams["figure.figsize"] = (20,20)
-
-    #for edge in G.edges():
-
-    E = E.detach().numpy()
-    for u, w, d in G.edges(data=True):
-        d['weight'] = E[u,w]
-
-    edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-
-
-    cmap = plt.cm.gnuplot
-    nx.draw(G, node_color=v.detach().numpy(), edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap, node_size=30,pos=pos)
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-    sm._A = []
-    plt.colorbar(sm)
-    plt.title('Nodes colored by potential v')
- #  plt.savefig(file+'.png')
-    plt.show()
-
-    vmin=np.min(weights)
-    vmax=np.max(weights)
-    subset_nodes=range(n1)
-    #subset_nodes = np.loadtxt(data_path+graph_name+'_nodes.txt').astype(int)
-    G_part = nx.from_numpy_matrix(A_sub)
-    color_map = []
-    for node in G:
-        if node in subset_nodes:
-            color_map.append('blue')
-        else:
-            color_map.append('green')
-    cmap = plt.cm.gnuplot
-    nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0, edge_cmap=cmap, vmin=vmin,
-            vmax=vmax, cmap=cmap, node_size=30,pos=pos)
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-    sm._A = []
-    plt.colorbar(sm)
-    plt.title('Edges colored by E')
-    #  plt.savefig(file+'.png')
-    plt.show()
 
 
