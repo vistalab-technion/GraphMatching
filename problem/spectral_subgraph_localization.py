@@ -18,8 +18,9 @@ k = 4
 
 clusters, centroids = kmeans1d.cluster(x, k)
 
-print(clusters)   # [1, 1, 1, 0, 3, 3, 3, 2, 2, 2]
+print(clusters)  # [1, 1, 1, 0, 3, 3, 3, 2, 2, 2]
 print(centroids)  # [-50.0, 4.1, 94.0, 200.5]
+
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
     p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
@@ -39,35 +40,37 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum):
+    def __init__(self, L, ref_spectrum, params):
         self.L = L
         self.ref_spectrum = ref_spectrum
+        self.params = params
 
     def solve(self):
         L = self.L
         ref_spectrum = self.ref_spectrum
         n = L.shape[0]
         l21_symm_centered_prox = ProxL21ForSymmetricCenteredMatrix(solver="cvx")
-        id_prox = ProxId()
 
         # init
         v = torch.zeros(n, requires_grad=True, dtype=torch.float64)
         E = torch.zeros([n, n], dtype=torch.float64)
         E = double_centering(0.5 * (E + E.T)).requires_grad_()
 
-        maxiter = 100
-        mu_l21 = 1
-        mu_MS = 0.3
-        mu_trace = 0
+        maxiter = self.params['maxiter']
+        mu_l21 = self.params['mu_l21']
+        mu_MS = self.params['mu_MS']
+        mu_trace = self.params['mu_trace']
+        v_prox = self.params['v_prox']
+        E_prox = self.params['E_prox']
 
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
-        lr = 0.2
+        lr = self.params['lr']
         lamb = mu_l21 * lr  # This setting is important!
-        momentum = 0.1
-        dampening = 0
+        momentum = self.params['momentum']
+        dampening = self.params['dampening']
         pgm = PGM(params=[{'params': v}, {'params': E}],
-                  proxs=[id_prox, l21_symm_centered_prox],
+                  proxs=[v_prox, E_prox],
                   lr=lr,
                   momentum=momentum,
                   dampening=dampening,
@@ -218,6 +221,17 @@ if __name__ == '__main__':
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
+    params = {'maxiter': 1000,
+              'mu_l21': 1,
+              'mu_MS': 0.3,
+              'mu_trace': 0.0,
+              'lr': 0.2,
+              'momentum': 0.1,
+              'dampening': 0,
+              'v_prox': ProxId(),
+              'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
+              }
+
+    subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum, params)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()

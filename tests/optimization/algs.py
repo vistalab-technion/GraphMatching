@@ -61,8 +61,8 @@ class TestProx(BaseTestOptimization):
         error_loss = full_loss_function(x.detach()) - full_loss_function(x_cvx_opt)
         print(x.detach())
         print(x_cvx.value)
-        print(f"||x-x*|| = {error_x}")
-        print(f"||l-l*|| = {error_loss}")
+        print(f"||x-x_cvx|| = {error_x}")
+        print(f"l-l_cvx = {error_loss}")
         assert torch.isclose(error_x, torch.zeros(1, dtype=torch.float64), 1e-3, 1e-2)
         assert torch.isclose(error_loss, torch.zeros(1, dtype=torch.float64), 1e-3,
                              1e-2)
