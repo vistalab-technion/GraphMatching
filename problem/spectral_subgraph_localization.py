@@ -40,10 +40,11 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum, params):
+    def __init__(self, L, ref_spectrum, params, plots=None):
         self.L = L
         self.ref_spectrum = ref_spectrum
         self.params = params
+        self.plots = plots
 
     def solve(self):
         L = self.L
@@ -125,81 +126,90 @@ class SubgraphIsomorphismSolver:
     def trace_reg(E, n):
         return (torch.trace(E) - n) ** 2
 
-    def plots(self):
-        plt.loglog(self.loss_vals, 'b')
-        plt.title('full loss')
-        plt.xlabel('iter')
-        plt.show()
+    def plot(self):
+        if self.plots['full_loss']:
+            plt.loglog(self.loss_vals, 'b')
+            plt.title('full loss')
+            plt.xlabel('iter')
+            plt.show()
 
-        ax = plt.subplot()
-        im = ax.imshow(self.E)
-        divider = make_axes_locatable(ax)
-        ax.set_title('E')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['E']:
+            ax = plt.subplot()
+            im = ax.imshow(self.E)
+            divider = make_axes_locatable(ax)
+            ax.set_title('E')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        ax = plt.subplot()
-        L_edited = self.E + self.L.numpy()
-        im = ax.imshow(L_edited)
-        divider = make_axes_locatable(ax)
-        ax.set_title('L+E')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['L+E']:
+            ax = plt.subplot()
+            L_edited = self.E + self.L.numpy()
+            im = ax.imshow(L_edited)
+            divider = make_axes_locatable(ax)
+            ax.set_title('L+E')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        ax = plt.subplot()
-        A_edited = -set_diag_zero(self.E + self.L.numpy())
-        im = ax.imshow(A_edited)
-        divider = make_axes_locatable(ax)
-        ax.set_title('A edited')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['A edited']:
+            ax = plt.subplot()
+            A_edited = -set_diag_zero(self.E + self.L.numpy())
+            im = ax.imshow(A_edited)
+            divider = make_axes_locatable(ax)
+            ax.set_title('A edited')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        plt.plot(np.sort(self.v), 'xr')
-        plt.title('v')
-        plt.show()
+        if self.plots['v']:
+            plt.plot(np.sort(self.v), 'xr')
+            plt.title('v')
+            plt.show()
 
-        ax = plt.subplot()
-        im = ax.imshow(np.diag(self.v))
-        divider = make_axes_locatable(ax)
-        ax.set_title('diag(v)')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['diag(v)']:
+            ax = plt.subplot()
+            im = ax.imshow(np.diag(self.v))
+            divider = make_axes_locatable(ax)
+            ax.set_title('diag(v)')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        ax = plt.subplot()
-        # _, v_clustered = kmeans2(self.v, 2, minit='points')
-        v = self.v - np.min(self.v)
-        v = v / np.max(v)
-        threshold = threshold_otsu(v, nbins=10)
-        v_otsu = (v > threshold).astype(float)
-        im = ax.imshow(np.diag(v_otsu))
-        divider = make_axes_locatable(ax)
-        ax.set_title('diag(v_otsu)')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['v_otsu']:
+            ax = plt.subplot()
+            # _, v_clustered = kmeans2(self.v, 2, minit='points')
+            v = self.v - np.min(self.v)
+            v = v / np.max(v)
+            threshold = threshold_otsu(v, nbins=10)
+            v_otsu = (v > threshold).astype(float)
+            im = ax.imshow(np.diag(v_otsu))
+            divider = make_axes_locatable(ax)
+            ax.set_title('diag(v_otsu)')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        ax = plt.subplot()
-        # _, v_clustered = kmeans2(self.v, 2, minit='points')
-        v = self.v - np.min(self.v)
-        v = v / np.max(v)
-        v_clustered, centroids = kmeans1d.cluster(v, k=2)
-        im = ax.imshow(np.diag(v_clustered))
-        divider = make_axes_locatable(ax)
-        ax.set_title('diag(v_kmeans)')
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
-        plt.show()
+        if self.plots['v_kmeans']:
+            ax = plt.subplot()
+            # _, v_clustered = kmeans2(self.v, 2, minit='points')
+            v = self.v - np.min(self.v)
+            v = v / np.max(v)
+            v_clustered, centroids = kmeans1d.cluster(v, k=2)
+            im = ax.imshow(np.diag(v_clustered))
+            divider = make_axes_locatable(ax)
+            ax.set_title('diag(v_kmeans)')
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            plt.colorbar(im, cax=cax)
+            plt.show()
 
-        plt.plot(self.ref_spectrum.numpy(), 'og')
-        plt.plot(self.spectrum, 'xr')
-        plt.title('ref spect vs spect')
-        plt.show()
+        if self.plots['ref spect vs spect']:
+            plt.plot(self.ref_spectrum.numpy(), 'og')
+            plt.plot(self.spectrum, 'xr')
+            plt.title('ref spect vs spect')
+            plt.show()
 
-    def plots_on_graph(self, A):
+    def plot_on_graph(self, A):
         vmin = np.min(self.v)
         vmax = np.max(self.v)
 
@@ -216,14 +226,14 @@ class SubgraphIsomorphismSolver:
         edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
 
         cmap = plt.cm.gnuplot
-        plt.figure()
+        ax = plt.subplot()
         nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
                 node_size=30,
-                pos=pos)
+                pos=pos, ax = ax)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm._A = []
+        ax.set_title('Nodes colored by potential v')
         plt.colorbar(sm)
-        plt.title('Nodes colored by potential v')
         #  plt.savefig(file+'.png')
         plt.show()
 
@@ -239,14 +249,14 @@ class SubgraphIsomorphismSolver:
             else:
                 color_map.append('green')
         cmap = plt.cm.gnuplot
-        plt.figure()
+        ax = plt.subplot()
         nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0,
                 edge_cmap=cmap, vmin=vmin,
                 vmax=vmax, cmap=cmap, node_size=30, pos=pos)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm._A = []
+        ax.set_title('Edges colored by E')
         plt.colorbar(sm)
-        plt.title('Edges colored by E')
         #  plt.savefig(file+'.png')
         plt.show()
 
@@ -307,8 +317,18 @@ if __name__ == '__main__':
               # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
               'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L)
               }
-
-    subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum, params)
+    plots = {
+        'full_loss': True,
+        'E': True,
+        'v': True,
+        'diag(v)': True,
+        'v_otsu': False,
+        'v_kmeans': True,
+        'A edited': False,
+        'L+E': False,
+        'ref spect vs spect': True}
+    subgraph_isomorphism_solver = \
+        SubgraphIsomorphismSolver(L, ref_spectrum, params, plots)
     v, E = subgraph_isomorphism_solver.solve()
-    subgraph_isomorphism_solver.plots()
-    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int))
+    subgraph_isomorphism_solver.plot()
+    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))

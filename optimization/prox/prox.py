@@ -276,8 +276,8 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
             [x @ ones == zeros,
              x == x.T,
-             self.L+x-cp.diag(cp.diag(self.L+x))<=0,
-             cp.trace(self.L+x) == n])
+             self.L + x - cp.diag(cp.diag(self.L + x)) <= 0,
+             cp.trace(self.L + x) == n])
         prob.solve()
         return torch.tensor(x.value)
 
