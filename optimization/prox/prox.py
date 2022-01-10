@@ -224,7 +224,7 @@ class ProxL21ForSymmetricCenteredMatrix(ProxSymmetricCenteredMatrix):
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
             [x @ ones == zeros,
              x == x.T])
-        prob.solve()
+        prob.solve(verbose=True,max_iters=1000)
         return torch.tensor(x.value)
 
 

@@ -10,6 +10,7 @@ from tests.optimization.util import double_centering, set_diag_zero
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
+import networkx as nx
 
 
 def block_stochastic_graph(n1, n2):
@@ -176,28 +177,124 @@ class SubgraphIsomorphismSolver:
         plt.title('ref spect vs spect')
         plt.show()
 
+def edgelist_to_adjmatrix(edgeList_file):
+    edge_list = np.loadtxt(edgeList_file, usecols=range(2))
+
+    n = int(np.amax(edge_list) + 1)
+    # n = int(np.amax(edge_list))
+    # print(n)
+
+    e = np.shape(edge_list)[0]
+
+    a = np.zeros((n, n))
+
+    # make adjacency matrix A1
+
+    for i in range(0, e):
+        n1 = int(edge_list[i, 0])  # - 1
+
+        n2 = int(edge_list[i, 1])  # - 1
+
+        a[n1, n2] = 1.0
+        a[n2, n1] = 1.0
+
+    return a
+
 
 if __name__ == '__main__':
     # torch.manual_seed(12)
+
+    data_path='../data/10-01-2022_15-17-48/'
+    graph_name='pl_81_3_565_nw_89_6_360'
+    n_con=0
 
     n1 = 5
     n2 = 15
     n = n1 + n2
     p = block_stochastic_graph(n1, n2)
-
-    A = torch.tril(torch.bernoulli(p))
+    print(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'.txt')
+    A = torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'_full.txt'))
+    #A = torch.tril(torch.bernoulli(p))
     A = (A + A.T)
     D = torch.diag(A.sum(dim=1))
     L = D - A
+    subset_nodes = np.loadtxt(data_path+graph_name+'_nodes.txt').astype(int)
+    A_d=A.detach().numpy().astype(int)
+
+
+    G = nx.from_numpy_matrix(A_d)
+    color_map = []
+    for node in G:
+        if node in subset_nodes:
+            color_map.append('blue')
+        else:
+            color_map.append('green')
+    cmap = plt.cm.gnuplot
+    nx.draw(G, node_color=color_map, node_size=30)
+
+    #  plt.savefig(file+'.png')
+    plt.show()
+
 
     plt.imshow(A)
     plt.title('A')
     plt.show()
 
-    A_sub = A[0:n1, 0:n1]
+    #A_sub = A[0:n1, 0:n1]
+    A_sub=torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_part.txt'))
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
+
+
+    vmin=np.min(v.detach().numpy())
+    vmax = np.max(v.detach().numpy())
+
+    G = nx.from_numpy_matrix(A.detach().numpy().astype(int))
+    pos = nx.spring_layout(G)
+    # pos = nx.spring_layout(G)
+    # plt.rcParams["figure.figsize"] = (20,20)
+
+    #for edge in G.edges():
+
+    E = E.detach().numpy()
+    for u, w, d in G.edges(data=True):
+        d['weight'] = E[u,w]
+
+    edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+
+
+    cmap = plt.cm.gnuplot
+    nx.draw(G, node_color=v.detach().numpy(), edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap, node_size=30,pos=pos)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm._A = []
+    plt.colorbar(sm)
+    plt.title('Nodes colored by potential v')
+ #  plt.savefig(file+'.png')
+    plt.show()
+
+    vmin=np.min(weights)
+    vmax=np.max(weights)
+    subset_nodes=range(n1)
+    #subset_nodes = np.loadtxt(data_path+graph_name+'_nodes.txt').astype(int)
+    G_part = nx.from_numpy_matrix(A_sub)
+    color_map = []
+    for node in G:
+        if node in subset_nodes:
+            color_map.append('blue')
+        else:
+            color_map.append('green')
+    cmap = plt.cm.gnuplot
+    nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0, edge_cmap=cmap, vmin=vmin,
+            vmax=vmax, cmap=cmap, node_size=30,pos=pos)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm._A = []
+    plt.colorbar(sm)
+    plt.title('Edges colored by E')
+    #  plt.savefig(file+'.png')
+    plt.show()
+
+
