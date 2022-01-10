@@ -216,6 +216,7 @@ class SubgraphIsomorphismSolver:
         edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
 
         cmap = plt.cm.gnuplot
+        plt.figure()
         nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
                 node_size=30,
                 pos=pos)
@@ -238,6 +239,7 @@ class SubgraphIsomorphismSolver:
             else:
                 color_map.append('green')
         cmap = plt.cm.gnuplot
+        plt.figure()
         nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0,
                 edge_cmap=cmap, vmin=vmin,
                 vmax=vmax, cmap=cmap, node_size=30, pos=pos)
@@ -274,7 +276,7 @@ def edgelist_to_adjmatrix(edgeList_file):
 
 
 if __name__ == '__main__':
-    # torch.manual_seed(12)
+    torch.manual_seed(12)
 
     n1 = 5
     n2 = 15
@@ -296,7 +298,7 @@ if __name__ == '__main__':
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     params = {'maxiter': 100,
               'mu_l21': 1,
-              'mu_MS': 5,
+              'mu_MS': 8,
               'mu_trace': 0.0,
               'lr': 0.002,
               'momentum': 0.1,
