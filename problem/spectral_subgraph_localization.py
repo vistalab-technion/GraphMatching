@@ -177,7 +177,7 @@ class SubgraphIsomorphismSolver:
         plt.title('ref spect vs spect')
         plt.show()
 
-    def plots_on_graph(self,A):
+    def plots_on_graph(self,A,subset_nodes):
         vmin = np.min(self.v)
         vmax = np.max(self.v)
 
@@ -206,7 +206,7 @@ class SubgraphIsomorphismSolver:
 
         vmin = np.min(weights)
         vmax = np.max(weights)
-        subset_nodes=range(n1)
+       # subset_nodes=range(n1)
        # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
 
         color_map = []
@@ -253,7 +253,7 @@ if __name__ == '__main__':
     # torch.manual_seed(12)
 
     data_path='../data/10-01-2022_15-17-48/'
-    graph_name='pl_81_3_565_nw_89_6_360'
+    graph_name='ba_75_2_pl_28_1_556'
     n_con=0
 
     n1 = 5
@@ -261,8 +261,8 @@ if __name__ == '__main__':
     n = n1 + n2
     p = block_stochastic_graph(n1, n2)
     print(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'.txt')
-    #A = torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'_full.txt'))
-    A = torch.tril(torch.bernoulli(p))
+    A = torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_nc'+str(n_con).zfill(4)+'_full.txt'))
+    #A = torch.tril(torch.bernoulli(p))
     A = (A + A.T)
     D = torch.diag(A.sum(dim=1))
     L = D - A
@@ -288,15 +288,15 @@ if __name__ == '__main__':
     plt.title('A')
     plt.show()
 
-    A_sub = A[0:n1, 0:n1]
-    #A_sub=torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_part.txt'))
+    #A_sub = A[0:n1, 0:n1]
+    A_sub=torch.from_numpy(edgelist_to_adjmatrix(data_path+graph_name+'_part.txt'))
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
-    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int))
+    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int),subset_nodes)
 
 
 

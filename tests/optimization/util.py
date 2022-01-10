@@ -19,3 +19,4 @@ def set_diag_zero(x):
     x[ind[0], ind[1]] = torch.zeros(x.shape[0])
 
     return x
+
