@@ -267,6 +267,7 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
         raise exception('not implemented')
 
     def _cvx_prox(self, z: Tensor, lamb: float):
+        n = z.shape[0]
         z = z.numpy()
         x = cp.Variable(z.shape)
         ones = np.ones([z.shape[0], 1])
@@ -275,7 +276,8 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
             [x @ ones == zeros,
              x == x.T,
-             self.L+x-cp.diag(self.L+x)<=0])
+             self.L+x-cp.diag(cp.diag(self.L+x))<=0,
+             cp.trace(self.L+x) == n])
         prob.solve()
         return torch.tensor(x.value)
 

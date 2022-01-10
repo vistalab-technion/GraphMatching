@@ -5,12 +5,12 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
-    ProxSymmetricCenteredMatrix, ProxId
+    ProxL21ForSymmCentdMatrixAndInequality, ProxSymmetricCenteredMatrix, ProxId
 from tests.optimization.util import double_centering, set_diag_zero
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
-
+import networkx as nx
 import kmeans1d
 
 x = [4.0, 4.1, 4.2, -50, 200.2, 200.4, 200.9, 80, 100, 102]
@@ -199,6 +199,79 @@ class SubgraphIsomorphismSolver:
         plt.title('ref spect vs spect')
         plt.show()
 
+    def plots_on_graph(self, A):
+        vmin = np.min(self.v)
+        vmax = np.max(self.v)
+
+        G = nx.from_numpy_matrix(A)
+        pos = nx.spring_layout(G)
+        # pos = nx.spring_layout(G)
+        # plt.rcParams["figure.figsize"] = (20,20)
+
+        # for edge in G.edges():
+
+        for u, w, d in G.edges(data=True):
+            d['weight'] = self.E[u, w]
+
+        edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+
+        cmap = plt.cm.gnuplot
+        nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
+                node_size=30,
+                pos=pos)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm._A = []
+        plt.colorbar(sm)
+        plt.title('Nodes colored by potential v')
+        #  plt.savefig(file+'.png')
+        plt.show()
+
+        vmin = np.min(weights)
+        vmax = np.max(weights)
+        subset_nodes = range(n1)
+        # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
+
+        color_map = []
+        for node in G:
+            if node in subset_nodes:
+                color_map.append('blue')
+            else:
+                color_map.append('green')
+        cmap = plt.cm.gnuplot
+        nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0,
+                edge_cmap=cmap, vmin=vmin,
+                vmax=vmax, cmap=cmap, node_size=30, pos=pos)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm._A = []
+        plt.colorbar(sm)
+        plt.title('Edges colored by E')
+        #  plt.savefig(file+'.png')
+        plt.show()
+
+
+def edgelist_to_adjmatrix(edgeList_file):
+    edge_list = np.loadtxt(edgeList_file, usecols=range(2))
+
+    n = int(np.amax(edge_list) + 1)
+    # n = int(np.amax(edge_list))
+    # print(n)
+
+    e = np.shape(edge_list)[0]
+
+    a = np.zeros((n, n))
+
+    # make adjacency matrix A1
+
+    for i in range(0, e):
+        n1 = int(edge_list[i, 0])  # - 1
+
+        n2 = int(edge_list[i, 1])  # - 1
+
+        a[n1, n2] = 1.0
+        a[n2, n1] = 1.0
+
+    return a
+
 
 if __name__ == '__main__':
     # torch.manual_seed(12)
@@ -221,17 +294,19 @@ if __name__ == '__main__':
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 1000,
+    params = {'maxiter': 100,
               'mu_l21': 1,
-              'mu_MS': 0.3,
+              'mu_MS': 5,
               'mu_trace': 0.0,
-              'lr': 0.2,
+              'lr': 0.002,
               'momentum': 0.1,
               'dampening': 0,
               'v_prox': ProxId(),
-              'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
+              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L)
               }
 
     subgraph_isomorphism_solver = SubgraphIsomorphismSolver(L, ref_spectrum, params)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plots()
+    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int))
