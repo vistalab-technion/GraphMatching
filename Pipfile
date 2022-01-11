@@ -18,6 +18,7 @@ tqdm = "*"
 pyproximal = "*"
 pytest = "*"
 scikit-image = "*"
+kmeans1d = "*"
 
 [dev-packages]
 pytest = "*"

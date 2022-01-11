@@ -228,6 +228,60 @@ class ProxL21ForSymmetricCenteredMatrix(ProxSymmetricCenteredMatrix):
         return torch.tensor(x.value)
 
 
+class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
+    """
+     class for l21_for_symmetric_centered_matrix proximal operator
+    """
+
+    def __init__(self, rho: float = 1,
+                 tol: float = 1e-6,
+                 maxiter: int = 1000,
+                 x0: Optional = None,
+                 y0: Optional = None,
+                 L: Optional = None,
+                 solver=""):
+
+        super().__init__(solver=solver)
+
+        self.rho = rho
+        self.tol = tol
+        self.maxiter = maxiter
+        self.x0 = x0
+        self.y0 = y0
+        self.L = L if L is None else 0
+        self.l21_prox = ProxL21()
+        self.symmetric_centered_prox = ProxSymmetricCenteredMatrix()
+
+    def __stopping_condition(self, x, y):
+        r = torch.norm(x - y, p='fro')
+        return r, r < self.tol
+
+    def __call__(self, z: Tensor, lamb: float = 0):
+        if self.solver == "cvx":
+            return self._cvx_prox(z=z, lamb=lamb)
+        else:
+            return self._prox(z=z, lamb=lamb)
+
+    def _prox(self, z: Tensor, lamb: float):
+
+        raise exception('not implemented')
+
+    def _cvx_prox(self, z: Tensor, lamb: float):
+        n = z.shape[0]
+        z = z.numpy()
+        x = cp.Variable(z.shape)
+        ones = np.ones([z.shape[0], 1])
+        zeros = np.zeros([z.shape[0], 1])
+        prob = cp.Problem(cp.Minimize(
+            cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
+            [x @ ones == zeros,
+             x == x.T,
+             self.L+x-cp.diag(cp.diag(self.L+x))<=0,
+             cp.trace(self.L+x) == n])
+        prob.solve()
+        return torch.tensor(x.value)
+
+
 if __name__ == '__main__':
     # test l2 prox
     n = 5
