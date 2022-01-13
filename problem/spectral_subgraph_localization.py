@@ -5,21 +5,14 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
-    ProxL21ForSymmCentdMatrixAndInequality, ProxSymmetricCenteredMatrix, ProxId
+    ProxL21ForSymmCentdMatrixAndInequality, ProxSymmetricCenteredMatrix, ProxId, \
+    ProxNonNeg
 from tests.optimization.util import double_centering, set_diag_zero
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
 import networkx as nx
 import kmeans1d
-
-x = [4.0, 4.1, 4.2, -50, 200.2, 200.4, 200.9, 80, 100, 102]
-k = 4
-
-clusters, centroids = kmeans1d.cluster(x, k)
-
-print(clusters)  # [1, 1, 1, 0, 3, 3, 3, 2, 2, 2]
-print(centroids)  # [-50.0, 4.1, 94.0, 200.5]
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
@@ -53,7 +46,7 @@ class SubgraphIsomorphismSolver:
         l21_symm_centered_prox = ProxL21ForSymmetricCenteredMatrix(solver="cvx")
 
         # init
-        v = torch.zeros(n, requires_grad=True, dtype=torch.float64)
+        v = torch.ones(n, requires_grad=True, dtype=torch.float64)
         E = torch.zeros([n, n], dtype=torch.float64)
         E = double_centering(0.5 * (E + E.T)).requires_grad_()
 
@@ -61,6 +54,7 @@ class SubgraphIsomorphismSolver:
         mu_l21 = self.params['mu_l21']
         mu_MS = self.params['mu_MS']
         mu_trace = self.params['mu_trace']
+        mu_split = self.params['mu_split']
         v_prox = self.params['v_prox']
         E_prox = self.params['E_prox']
 
@@ -78,7 +72,9 @@ class SubgraphIsomorphismSolver:
                   nesterov=False)
         smooth_loss_fuction = lambda ref, L, E, v: \
             self.spectrum_alignment_term(ref, L, E, v) \
-            + mu_MS * self.MSreg(L, E, v) + mu_trace * self.trace_reg(E, n)
+            + mu_MS * self.MSreg(L, E, v)\
+            + mu_trace * self.trace_reg(E, n)\
+            + mu_split*self.graph_split_term(L, E)
 
         non_smooth_loss_function = lambda E: mu_l21 * l21(E)
         full_loss_function = lambda ref, L, E, v: \
@@ -119,6 +115,14 @@ class SubgraphIsomorphismSolver:
         return loss
 
     @staticmethod
+    def graph_split_term(L, E):
+        L_edited = L + E
+        spectrum = torch.linalg.eigvalsh(L_edited)
+        loss = torch.norm(spectrum[0:2]) ** 2
+        #print(loss)
+        return loss
+
+    @staticmethod
     def MSreg(L, E, v):
         return v.T @ (L + E) @ v
 
@@ -135,9 +139,9 @@ class SubgraphIsomorphismSolver:
 
         if self.plots['E']:
             ax = plt.subplot()
-            im = ax.imshow(self.E)
+            im = ax.imshow(self.E - np.diag(np.diag(self.E)))
             divider = make_axes_locatable(ax)
-            ax.set_title('E')
+            ax.set_title('E -diag(E)')
             cax = divider.append_axes("right", size="5%", pad=0.05)
             plt.colorbar(im, cax=cax)
             plt.show()
@@ -229,7 +233,7 @@ class SubgraphIsomorphismSolver:
         ax = plt.subplot()
         nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
                 node_size=30,
-                pos=pos, ax = ax)
+                pos=pos, ax=ax)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm._A = []
         ax.set_title('Nodes colored by potential v')
@@ -245,7 +249,7 @@ class SubgraphIsomorphismSolver:
         color_map = []
         for node in G:
             if node in subset_nodes:
-                color_map.append('blue')
+                color_map.append('red')
             else:
                 color_map.append('green')
         cmap = plt.cm.gnuplot
@@ -291,7 +295,7 @@ if __name__ == '__main__':
     n1 = 5
     n2 = 15
     n = n1 + n2
-    p = block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.05)
+    p = block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.2)
 
     A = torch.tril(torch.bernoulli(p))
     A = (A + A.T)
@@ -306,16 +310,18 @@ if __name__ == '__main__':
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 100,
-              'mu_l21': 1,
-              'mu_MS': 8,
+    params = {'maxiter': 1000,
+              'mu_l21': 0.1,
+              'mu_MS': 10,
+              'mu_split': 10,
               'mu_trace': 0.0,
-              'lr': 0.002,
-              'momentum': 0.1,
+              'lr': 0.02,
+              'momentum': 0,
               'dampening': 0,
               'v_prox': ProxId(),
               # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
-              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L)
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
+                                                               trace_upper_bound=n)
               }
     plots = {
         'full_loss': True,
@@ -324,7 +330,7 @@ if __name__ == '__main__':
         'diag(v)': True,
         'v_otsu': False,
         'v_kmeans': True,
-        'A edited': False,
+        'A edited': True,
         'L+E': False,
         'ref spect vs spect': True}
     subgraph_isomorphism_solver = \
