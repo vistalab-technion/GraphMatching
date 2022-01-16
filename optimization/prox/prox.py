@@ -278,7 +278,9 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
              x == x.T,
              self.L+x-cp.diag(cp.diag(self.L+x))<=0,
              cp.trace(self.L+x) == n])
-        prob.solve(verbose=True,max_iters=1000)
+        #prob.solve(verbose=True,max_iters=1000)
+        prob.solve()
+
         return torch.tensor(x.value)
 
 
