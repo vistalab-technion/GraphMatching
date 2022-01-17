@@ -52,6 +52,18 @@ class ProxId(ProxBase):
         return z
 
 
+class ProxNonNeg(ProxBase):
+    """
+    Identity prox (pass through)
+    """
+
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
+
+    def __call__(self, z: Tensor, lamb: float):
+        return torch.max(z, torch.zeros_like(z))
+
+
 class ProxL2(ProxBase):
     """
      class for l2 proximal operator
@@ -239,6 +251,7 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
                  x0: Optional = None,
                  y0: Optional = None,
                  L: Optional = None,
+                 trace_upper_bound=None,
                  solver=""):
 
         super().__init__(solver=solver)
@@ -248,7 +261,9 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
         self.maxiter = maxiter
         self.x0 = x0
         self.y0 = y0
-        self.L = L if L is None else 0
+        self.L = L if L is not None else 0
+        self.trace_upper_bound = \
+            trace_upper_bound if trace_upper_bound is not None else self.L.shape[0]
         self.l21_prox = ProxL21()
         self.symmetric_centered_prox = ProxSymmetricCenteredMatrix()
 
@@ -267,6 +282,7 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
         raise exception('not implemented')
 
     def _cvx_prox(self, z: Tensor, lamb: float):
+        t = self.trace_upper_bound
         n = z.shape[0]
         z = z.numpy()
         x = cp.Variable(z.shape)
@@ -276,9 +292,12 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
             [x @ ones == zeros,
              x == x.T,
-             self.L+x-cp.diag(cp.diag(self.L+x))<=0,
-             cp.trace(self.L+x) == n])
-        #prob.solve(verbose=True,max_iters=1000)
+
+             self.L + x - cp.diag(cp.diag(self.L + x)) <= 0,
+             cp.trace(self.L + x) == t])
+
+
+
         prob.solve()
 
         return torch.tensor(x.value)
