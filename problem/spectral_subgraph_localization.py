@@ -54,12 +54,12 @@ class SubgraphIsomorphismSolver:
 
         # init
 
-       # v = torch.zeros(n, requires_grad=True, dtype=torch.float64)
-       # E = torch.zeros([n, n], dtype=torch.float64)
-       # E = double_centering(0.5 * (E + E.T)).requires_grad_()
+        v = torch.zeros(n, requires_grad=True, dtype=torch.float64)
+        E = torch.zeros([n, n], dtype=torch.float64)
+        E = double_centering(0.5 * (E + E.T)).requires_grad_()
         #print(E.type())
 
-        v, E = utils.init_groundtruth(full_graph, part_graph, part_nodes, 5.0)
+        #v, E = utils.init_groundtruth(full_graph, part_graph, part_nodes, 5.0)
 
         plt.figure;
         E_np = E.detach().numpy()
@@ -68,10 +68,6 @@ class SubgraphIsomorphismSolver:
         plt.colorbar()
         plt.show()
 
-        #E = E.requires_grad_()
-
-        #print(type(v))
-        print(self.params)
         maxiter = self.params['maxiter']
         mu_l21 = self.params['mu_l21']
         mu_MS = self.params['mu_MS']
@@ -94,9 +90,9 @@ class SubgraphIsomorphismSolver:
                   nesterov=False)
         smooth_loss_fuction = lambda ref, L, E, v: \
             self.spectrum_alignment_term(ref, L, E, v) \
-            + mu_MS * self.MSreg(L, E, v)\
-            + mu_trace * self.trace_reg(E, n)\
-            + mu_split*self.graph_split_term(L, E)
+            + mu_MS * self.MSreg(L, E, v) \
+            + mu_trace * self.trace_reg(E, n) \
+            + mu_split * self.graph_split_term(L, E)
 
         non_smooth_loss_function = lambda E: mu_l21 * l21(E)
         full_loss_function = lambda ref, L, E, v: \
@@ -141,7 +137,7 @@ class SubgraphIsomorphismSolver:
         L_edited = L + E
         spectrum = torch.linalg.eigvalsh(L_edited)
         loss = torch.norm(spectrum[0:2]) ** 2
-        #print(loss)
+        # print(loss)
         return loss
 
     @staticmethod
@@ -624,6 +620,7 @@ if __name__ == '__main__':
             G_disc.remove_edge(*edge)
 
     pos = nx.spring_layout(G_disc)
+
     plt.imshow(A)
     plt.title('A')
     plt.show()
@@ -634,7 +631,7 @@ if __name__ == '__main__':
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 1000,
+    params = {'maxiter': 10000,
               'mu_l21': 3,
               'mu_MS': 1,
               'mu_split': 0.0,
@@ -662,10 +659,10 @@ if __name__ == '__main__':
     v, E = subgraph_isomorphism_solver.solve(G,G_part,subset_nodes)
     subgraph_isomorphism_solver.plots_on_graph(A.numpy().astype(int), subset_nodes, pos, '../results/test/', 'b')
     v_b, E_b = utils.init_groundtruth(G, G_part, subset_nodes, 5.0)
-
+    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
     subgraph_isomorphism_solver.plot()
     subgraph_isomorphism_solver.v=v_b.detach().numpy()
     subgraph_isomorphism_solver.E=E_b.detach().numpy()
     subgraph_isomorphism_solver.plots_on_graph(A.numpy().astype(int),subset_nodes, pos, '../results/test/','b')
-   # subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
+
 
