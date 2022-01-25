@@ -68,14 +68,9 @@ class SubgraphIsomorphismSolver:
         maxiter = self.params['maxiter']
         lr = self.params['lr']
         lamb = self.mu_l21 * lr  # This setting is important!
-        momentum = self.params['momentum']
-        dampening = self.params['dampening']
         pgm = PGM(params=[{'params': v}, {'params': E}],
                   proxs=[v_prox, E_prox],
-                  lr=lr,
-                  momentum=momentum,
-                  dampening=dampening,
-                  nesterov=False)
+                  lr=lr)
 
         full_loss_function = lambda ref, L, E, v: \
             self.smooth_loss_function(ref, L, E, v) \
@@ -382,18 +377,16 @@ if __name__ == '__main__':
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     params = {'maxiter': 100,
-              'mu_spectral': 10,
+              'mu_spectral': 0,
               'mu_l21': 1,
               'mu_MS': 0,
               'mu_split': 0,
               'mu_trace': 0.0,
               'lr': 0.02,
-              'momentum': 0,
-              'dampening': 0,
               'v_prox': ProxNonNeg(),
               # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
               'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
-                                                               trace_upper_bound=n),
+                                                               trace_upper_bound=0),
               'trace_val': 0
               }
     plots = {

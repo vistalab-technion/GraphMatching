@@ -12,6 +12,13 @@ class PGM(SGD):
                  dampening: float = 0,
                  nesterov: bool = False):
 
+        if momentum != 0:
+            raise ValueError("momentum is not supported")
+        if dampening != 0:
+            raise ValueError("dampening is not supported")
+        if nesterov != 0:
+            raise ValueError("nesterov is not supported")
+
         kwargs = dict(lr=lr, momentum=momentum, dampening=dampening, weight_decay=0,
                       nesterov=nesterov)
         super().__init__(params, **kwargs)
@@ -27,6 +34,7 @@ class PGM(SGD):
     def step(self, lamb, closure=None):
         # this performs a gradient step
         # optionally with momentum or nesterov acceleration
+        self.param_groups[0]['params']
         super().step(closure=closure)
 
         for group in self.param_groups:

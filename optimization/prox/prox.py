@@ -64,6 +64,33 @@ class ProxNonNeg(ProxBase):
         return torch.max(z, torch.zeros_like(z))
 
 
+class ProxL1(ProxBase):
+    """
+     class for l1 proximal operator
+    """
+
+    def __init__(self, solver=""):
+        super().__init__(solver=solver)
+
+    def __call__(self, z: Tensor, lamb: float):
+        if self.solver == "cvx":
+            return self._cvx_prox(z=z, lamb=lamb)
+        else:
+            return self._prox(z=z, lamb=lamb)
+
+    def _prox(self, z: Tensor, lamb: float):
+        return torch.sign(z)*\
+               torch.max(torch.abs(z) - lamb, torch.zeros_like(z))
+
+    def _cvx_prox(self, z: Tensor, lamb: float):
+        z = z.numpy()
+        x = cp.Variable(z.shape)
+        prob = cp.Problem(cp.Minimize(
+            cp.norm1(x) + (1 / (2 * lamb)) * cp.sum_squares(x - z)))
+        prob.solve()
+        return torch.tensor(x.value)
+
+
 class ProxL2(ProxBase):
     """
      class for l2 proximal operator
@@ -294,7 +321,6 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
              x == x.T,
              self.L + x - cp.diag(cp.diag(self.L + x)) <= 0,
              cp.trace(self.L + x) == t])
-
 
         prob.solve()
         return torch.tensor(x.value)

@@ -1,11 +1,23 @@
 import pytest
 from optimization.prox.prox import ProxL2, ProxL21, ProxSymmetricCenteredMatrix, \
-    ProxL21ForSymmetricCenteredMatrix, l21_prox_loss
+    ProxL21ForSymmetricCenteredMatrix, l21_prox_loss, ProxL1
 from tests.optimization.conftest import BaseTestOptimization
 import torch
 
 
 class TestProx(BaseTestOptimization):
+
+    def test_l1prox(self, n=5, lamb=0.1):
+        z = torch.rand(n, 1)
+        my_l1_prox = ProxL1()
+        my_l1_prox_cvx = ProxL1(solver="cvx")
+        z_prox = my_l1_prox(z=z, lamb=lamb)
+        z_prox_cvx = my_l1_prox_cvx(z=z, lamb=lamb)
+        print(f"l2 prox {z_prox}")
+        print(f"l2 prox  cvx {z_prox_cvx}")
+        assert torch.isclose(torch.norm(z_prox - z_prox_cvx).type(torch.FloatTensor),
+                             torch.zeros(1),
+                             self.atol, self.rtol)
 
     def test_l2prox(self, n=5, lamb=0.1):
         z = torch.rand(n, 1)
