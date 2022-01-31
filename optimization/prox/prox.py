@@ -256,13 +256,12 @@ class ProxL21ForSymmetricCenteredMatrix(ProxSymmetricCenteredMatrix):
 
     def _cvx_prox(self, z: Tensor, lamb: float):
         z = z.numpy()
-        x = cp.Variable(z.shape)
+        x = cp.Variable(z.shape, symmetric=True)
         ones = np.ones([z.shape[0], 1])
         zeros = np.zeros([z.shape[0], 1])
         prob = cp.Problem(cp.Minimize(
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
-            [x @ ones == zeros,
-             x == x.T])
+            [x @ ones == zeros])
         prob.solve()
         return torch.tensor(x.value)
 
@@ -312,15 +311,14 @@ class ProxL21ForSymmCentdMatrixAndInequality(ProxSymmetricCenteredMatrix):
         t = self.trace_upper_bound
         n = z.shape[0]
         z = z.numpy()
-        x = cp.Variable(z.shape)
+        x = cp.Variable(z.shape, symmetric=True)
         ones = np.ones([z.shape[0], 1])
         zeros = np.zeros([z.shape[0], 1])
         prob = cp.Problem(cp.Minimize(
             cp.mixed_norm(x, 2, 1) + (1 / (2 * lamb)) * cp.sum_squares(x - z)),
             [x @ ones == zeros,
-             x == x.T,
              self.L + x - cp.diag(cp.diag(self.L + x)) <= 0,
-             cp.trace(self.L + x) == t])
+             cp.trace(self.L + x) <= t])
 
         prob.solve()
         return torch.tensor(x.value)

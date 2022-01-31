@@ -144,7 +144,8 @@ class SubgraphIsomorphismSolver:
     def graph_split_loss(L, E):
         L_edited = L + E
         spectrum = torch.linalg.eigvalsh(L_edited)
-        loss = torch.norm(spectrum[0:2]) ** 2
+        #loss = torch.norm(spectrum[0:2]) ** 2
+        loss = spectrum[1]
         # print(loss)
         return loss
 
@@ -377,16 +378,17 @@ if __name__ == '__main__':
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     params = {'maxiter': 100,
-              'mu_spectral': 0,
+              'mu_spectral': 1,
               'mu_l21': 1,
-              'mu_MS': 0,
-              'mu_split': 0,
+              'mu_MS': 1,
+              'mu_split': 1,
               'mu_trace': 0.0,
               'lr': 0.02,
               'v_prox': ProxNonNeg(),
-              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
+              #'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
               'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
-                                                               trace_upper_bound=0),
+                                                                trace_upper_bound=
+                                                                1.1*torch.trace(L)),
               'trace_val': 0
               }
     plots = {
