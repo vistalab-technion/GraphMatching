@@ -1,5 +1,3 @@
-import copy
-
 import torch
 import numpy as np
 from numpy import histogram
@@ -14,20 +12,21 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
 import networkx as nx
-from datetime import datetime
-import os
-import utils
-
 import kmeans1d
+import optuna
+import copy
+import os
+import datetime
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
     p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
-    n=n1+n2
 
     p22 = set_diag_zero(p_parts * torch.ones(n2, n2))
 
     p12 = p_off * torch.ones(n1, n2)
+
+    n=n1+n2
 
     p = torch.zeros([n, n])
     p[0:n1, 0:n1] = p11
@@ -40,68 +39,53 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum, params, plots=None):
+    def __init__(self, L, ref_spectrum, params, plots):
         self.L = L
         self.ref_spectrum = ref_spectrum
         self.params = params
         self.plots = plots
+        self.spectrum_alignment_terms = []
+        self.MS_reg_terms = []
+        self.trace_reg_terms = []
+        self.graph_split_terms = []
+        self.l21_terms = []
+        self.save_individual_losses = plots['individual loss terms']
+        self.mu_spectral = self.params['mu_spectral']
+        self.mu_l21 = self.params['mu_l21']
+        self.mu_MS = self.params['mu_MS']
+        self.mu_trace = self.params['mu_trace']
+        self.mu_split = self.params['mu_split']
+        self.trace_val = self.params['trace_val']
 
-    def solve(self,full_graph,part_graph,part_nodes):
+    def solve(self):
         L = self.L
         ref_spectrum = self.ref_spectrum
         n = L.shape[0]
-        l21_symm_centered_prox = ProxL21ForSymmetricCenteredMatrix(solver="cvx")
 
         # init
-
-        v = torch.zeros(n, requires_grad=True, dtype=torch.float64)
+        v = torch.ones(n, requires_grad=True, dtype=torch.float64)
         E = torch.zeros([n, n], dtype=torch.float64)
         E = double_centering(0.5 * (E + E.T)).requires_grad_()
-        #print(E.type())
-
-        #v, E = utils.init_groundtruth(full_graph, part_graph, part_nodes, 5.0)
-
-        plt.figure;
-        E_np = E.detach().numpy()
-
-        plt.imshow(E_np)
-        plt.colorbar()
-        plt.show()
-
-        maxiter = self.params['maxiter']
-        mu_l21 = self.params['mu_l21']
-        mu_MS = self.params['mu_MS']
-        mu_trace = self.params['mu_trace']
-        mu_split = self.params['mu_split']
         v_prox = self.params['v_prox']
         E_prox = self.params['E_prox']
 
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
+        maxiter = self.params['maxiter']
         lr = self.params['lr']
-        lamb = mu_l21 * lr  # This setting is important!
-        momentum = self.params['momentum']
-        dampening = self.params['dampening']
+        lamb = self.mu_l21 * lr  # This setting is important!
         pgm = PGM(params=[{'params': v}, {'params': E}],
                   proxs=[v_prox, E_prox],
-                  lr=lr,
-                  momentum=momentum,
-                  dampening=dampening,
-                  nesterov=False)
-        smooth_loss_fuction = lambda ref, L, E, v: \
-            self.spectrum_alignment_term(ref, L, E, v) \
-            + mu_MS * self.MSreg(L, E, v) \
-            + mu_trace * self.trace_reg(E, n) \
-            + mu_split * self.graph_split_term(L, E)
+                  lr=lr)
 
-        non_smooth_loss_function = lambda E: mu_l21 * l21(E)
         full_loss_function = lambda ref, L, E, v: \
-            smooth_loss_fuction(ref, L, E, v) + non_smooth_loss_function(E)
+            self.smooth_loss_function(ref, L, E, v) \
+            + self.non_smooth_loss_function(E)
 
         loss_vals = []
         for i in tqdm(range(maxiter)):
             pgm.zero_grad()
-            loss = smooth_loss_fuction(ref_spectrum, L, E, v)
+            loss = self.smooth_loss_function(ref_spectrum, L, E, v)
             loss.backward()
             pgm.step(lamb=lamb)
             loss_vals.append(
@@ -115,8 +99,9 @@ class SubgraphIsomorphismSolver:
         self.E = E.detach().numpy()
         self.v = v.detach().numpy()
         self.spectrum = spectrum.detach().numpy()
+        self.loss=loss
         # self.plots()
-
+        #print(loss)
         print(f"v= {v}")
         print(f"E= {E}")
         print(f"lambda= {spectrum[0:k]}")
@@ -124,8 +109,38 @@ class SubgraphIsomorphismSolver:
         print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
         return v, E
 
+    def non_smooth_loss_function(self, E):
+        l21_loss = l21(E)
+
+        if self.save_individual_losses:
+            self.l21_terms.append(l21_loss)
+
+        return self.mu_l21 * l21(E)
+
+    def smooth_loss_function(self, ref_spectrum, L, E, v):
+
+        spectrum_alignment_term = self.spectrum_alignment_loss(ref_spectrum, L, E, v)
+        MS_reg_term = self.MSreg(L, E, v)
+        trace_reg_term = self.trace_reg(E, self.trace_val)
+        graph_split_term = self.graph_split_loss(L, E)
+
+        smooth_loss_term = \
+            self.mu_spectral * spectrum_alignment_term \
+            + self.mu_MS * MS_reg_term \
+            + self.mu_trace * trace_reg_term \
+            + self.mu_split * graph_split_term
+
+        if self.save_individual_losses:
+            self.spectrum_alignment_terms.append(
+                spectrum_alignment_term.detach().numpy())
+            self.MS_reg_terms.append(MS_reg_term.detach().numpy())
+            self.trace_reg_terms.append(trace_reg_term.detach().numpy())
+            self.graph_split_terms.append(graph_split_term.detach().numpy())
+
+        return smooth_loss_term
+
     @staticmethod
-    def spectrum_alignment_term(ref_spectrum, L, E, v):
+    def spectrum_alignment_loss(ref_spectrum, L, E, v):
         k = ref_spectrum.shape[0]
         Hamiltonian = L + E + torch.diag(v)
         spectrum = torch.linalg.eigvalsh(Hamiltonian)
@@ -133,10 +148,11 @@ class SubgraphIsomorphismSolver:
         return loss
 
     @staticmethod
-    def graph_split_term(L, E):
+    def graph_split_loss(L, E):
         L_edited = L + E
         spectrum = torch.linalg.eigvalsh(L_edited)
-        loss = torch.norm(spectrum[0:2]) ** 2
+        #loss = torch.norm(spectrum[0:2]) ** 2
+        loss = spectrum[1]
         # print(loss)
         return loss
 
@@ -145,9 +161,8 @@ class SubgraphIsomorphismSolver:
         return v.T @ (L + E) @ v
 
     @staticmethod
-    def trace_reg(E, n):
-        return (torch.trace(E) - n) ** 2
-
+    def trace_reg(E, trace_val=0):
+        return (torch.trace(E) - trace_val) ** 2
 
     def plot(self):
         if self.plots['full_loss']:
@@ -232,44 +247,56 @@ class SubgraphIsomorphismSolver:
             plt.title('ref spect vs spect')
             plt.show()
 
+        if self.plots['individual loss terms']:
+            font_color = "r"
+            # Create two subplots and unpack the output array immediately
+            fig, axes = plt.subplots(nrows=3, ncols=2)
+            ax = axes.flat
+            ax[0].loglog(self.spectrum_alignment_terms)
+            ax[0].set_ylabel('loss', c=font_color)
+            ax[0].set_xlabel('iteration', c=font_color)
+            ax[0].set_title(f'spectral alignment, mu = {self.mu_spectral}', c=font_color)
+
+            ax[1].loglog(self.MS_reg_terms)
+            ax[1].set_ylabel('loss', c=font_color)
+            ax[1].set_xlabel('iteration', c=font_color)
+            ax[1].set_title(f'MS reg, mu={self.mu_MS}', c=font_color)
+
+            ax[2].loglog(self.graph_split_terms)
+            ax[2].set_ylabel('loss', c=font_color)
+            ax[2].set_xlabel('iteration', c=font_color)
+            ax[2].set_title(f'graph split, mu={self.mu_split}', c=font_color)
+
+            ax[3].loglog(self.loss_vals)
+            ax[3].set_ylabel('loss', c=font_color)
+            ax[3].set_xlabel('iteration', c=font_color)
+            ax[3].set_title('full loss', c=font_color)
+
+            ax[4].loglog(self.l21_terms)
+            ax[4].set_ylabel('loss', c=font_color)
+            ax[4].set_xlabel('iteration', c=font_color)
+            ax[4].set_title(f'l21 reg, mu = {self.mu_l21}', c=font_color)
+
+            ax[5].loglog(self.trace_reg_terms)
+            ax[5].set_ylabel('loss', c=font_color)
+            ax[5].set_xlabel('iteration', c=font_color)
+            ax[5].set_title(f'trace reg, mu = {self.mu_trace}', c=font_color)
+
+            plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
+                                wspace=0.5,
+                                hspace=1)
+            plt.show()
 
     def plots_on_graph(self,A,subset_nodes,pos,res_folder,graph_name):
         vmin = np.min(self.v)
         vmax = np.max(self.v)
 
         G = nx.from_numpy_matrix(A)
-        # pos = nx.spring_layout(G)
-        # pos = nx.spring_layout(G)
-        # plt.rcParams["figure.figsize"] = (20,20)
-
-        # for edge in G.edges():
 
         for u, w, d in G.edges(data=True):
             d['weight'] = self.E[u, w]
 
         edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
-
-        # cmap = plt.cm.gnuplot
-
-        # plt.figure()
-
-        # ax = plt.subplot()
-        # nx.draw_networkx_nodes(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
-        #        node_size=30,
-        #        pos=pos, ax = ax)
-
-        # sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-        # sm._A = []
-        # ax.set_title('Nodes colored by potential v')
-        # plt.colorbar(sm)
-        # plt.savefig(res_folder + '/images/' + graph_name + '_v.png', dpi=100)
-        # plt.show()
-
-        # vmin = np.min(weights)
-        # vmax = np.max(weights)
-
-        # subset_nodes=range(n1)
-        # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
 
         color_map = []
         for node in G:
@@ -301,7 +328,7 @@ class SubgraphIsomorphismSolver:
         ax.set_title('Edges colored by E')
         plt.colorbar(sm, orientation="horizontal")
 
-        plt.savefig(res_folder + '/images/' + graph_name + '_E.pdf')  # , dpi=100)
+        #plt.savefig(res_folder + '/images/' + graph_name + '_E.pdf')  # , dpi=100)
         plt.show()
 
     def plot_on_graph(self, A):
@@ -356,136 +383,6 @@ class SubgraphIsomorphismSolver:
         plt.show()
 
 
-def run_on_graphset():
-
-        source_folder = '../data/benchmark/random_graphs/part_5_rest_15/'
-
-        #print(source_folder)
-
-        graph_dir =  os.listdir(source_folder)
-
-        now = datetime.now()
-        res_folder = '../results/' + now.strftime("%d-%m-%Y_%H-%M-%S")
-
-        os.mkdir(res_folder)
-        os.mkdir(res_folder + '/images')
-
-        #sh.copy(config_file, res_folder + '/' + config_file)
-
-        list_full = []
-        list_part = []
-        list_nodes = []
-
-        for file in graph_dir:
-            #print(file)
-            if 'full' in file:
-                list_full.append(file)
-            if 'part' in file:
-                list_part.append(file)
-            if 'nodes' in file:
-                list_nodes.append(file)
-        cg = 1
-        #print(list_nodes)
-        for graph in list_nodes:
-            print(cg)
-            cg = cg + 1
-            cur_graph = graph[0:len(graph) - 10]
-            nodes_part = source_folder + '/' + cur_graph + '_nodes.txt'
-            part_graph = source_folder + '/' + cur_graph + '_part.txt'
-
-            full_graphs = [g for g in list_full if cur_graph in g]
-
-            for i in range(len(full_graphs)):
-                graph_name = full_graphs[i][0:len(full_graphs[i]) - 9]
-                full_graph = source_folder + '/' + full_graphs[i]
-                disc_graph = source_folder + '/' + graph_name[0:-4] + '0000_full.txt'
-
-               # print(full_graph)
-                print(graph_name)
-
-                if (os.stat(part_graph).st_size != 0):
-                    #try:
-                        run_opt_on_graph(source_folder, disc_graph, graph_name, full_graph, part_graph, nodes_part,res_folder)
-                    #except:
-                        print('optimization failed')
-            # [v_with gt,obj_w_gt,v_in_the_beginning, v_in_the_end, obj values,eigenvalues]=run_optimization(full_graph, part_graph,part_nodes, [big_list_of_params])
-
-def run_opt_on_graph(source_folder, disc_graph, graph_name, full_graph, part_graph, nodes_part,res_folder):
-
-        data_path = source_folder
-
-
-        #print(data_path + graph_name + '_nc' + str(n_con).zfill(4) + '.txt')
-        A = torch.from_numpy(edgelist_to_adjmatrix(full_graph))
-        # A = torch.tril(torch.bernoulli(p))
-
-        #A = (A + A.T)'
-        print(A)
-        D = torch.diag(A.sum(dim=1))
-        L = D - A
-        subset_nodes = np.loadtxt(nodes_part).astype(int)
-        A_d = A.detach().numpy().astype(int)
-
-       # print(data_path + graph_name + '_nc0000.txt')
-        A_det = (edgelist_to_adjmatrix(disc_graph))
-        G_det = nx.from_numpy_matrix(A_det)
-        pos = nx.spring_layout(G_det)
-
-        G = nx.from_numpy_matrix(A_d)
-
-        color_map = []
-        for node in G:
-            if node in subset_nodes:
-                color_map.append('red')
-            else:
-                color_map.append('green')
-        cmap = plt.cm.gnuplot
-        nx.draw(G, node_color=color_map, node_size=30, pos=pos)
-
-        #  plt.savefig(file+'.png')
-        plt.show()
-
-        plt.imshow(A)
-        plt.title('A')
-        plt.show()
-
-        # A_sub = A[0:n1, 0:n1]
-        A_sub_np=edgelist_to_adjmatrix(part_graph)
-        A_sub = torch.from_numpy(A_sub_np)
-        D_sub = torch.diag(A_sub.sum(dim=1))
-        L_sub = D_sub - A_sub
-
-        G_part=nx.from_numpy_matrix(A_sub_np)
-        ref_spectrum = torch.linalg.eigvalsh(L_sub)
-        params = {'maxiter': 100,
-                  'mu_l21': 1,
-                  'mu_MS': 8,
-                  'mu_trace': 0.0,
-                  'lr': 0.01,
-                  'momentum': 0.1,
-                  'dampening': 0.0,
-                  'v_prox': ProxId(),
-                  # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
-                  'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L)
-                  }
-        plots = {
-            'full_loss': True,
-            'E': True,
-            'v': True,
-            'diag(v)': True,
-            'v_otsu': False,
-            'v_kmeans': True,
-            'A edited': False,
-            'L+E': False,
-            'ref spect vs spect': True}
-        subgraph_isomorphism_solver = \
-            SubgraphIsomorphismSolver(L, ref_spectrum, params, plots)
-        v, E = subgraph_isomorphism_solver.solve(G,G_part,subset_nodes)
-
-        # subgraph_isomorphism_solver.plot()
-        subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int), subset_nodes, pos,res_folder,graph_name)
-
-
 def edgelist_to_adjmatrix(edgeList_file):
     edge_list = np.loadtxt(edgeList_file, usecols=range(2))
 
@@ -510,57 +407,42 @@ def edgelist_to_adjmatrix(edgeList_file):
     return a
 
 
-def run_on_sbm(n_nodes, p_parts,p_off):
-    # make graph
+def opt_hyps(trial,full_graph,part_graph,nodes_part):
 
-    # run opt
 
-    n1 = 5
-    n2 = 15
-    n = n1 + n2
-    n_comps = len(n_nodes)
-    # p = block_stochastic_graph(n1, n2)
-    p_mat = np.ones((n_comps, n_comps)) * p_off
-    np.fill_diagonal(p_mat, p_parts)
-    subset_nodes = range(n_nodes[0])
-    probs = p_mat.tolist()
-    G = nx.stochastic_block_model(n_nodes, probs)
-    G_disc = copy.deepcopy(G)
 
-    for edge in G_disc.edges():
-        u = edge[0]
-        v = edge[1]
-        if u in subset_nodes and v not in subset_nodes:
-            G_disc.remove_edge(*edge)
 
-    pos = nx.spring_layout(G_disc)
-    A_nnp = nx.adjacency_matrix(G).todense().astype(float)
-    A = torch.from_numpy(A_nnp)
-    # A = torch.tril(torch.bernoulli(p))
-    print(A)
-    # A = (A + A.T)
+    A = torch.from_numpy(edgelist_to_adjmatrix(full_graph))
     D = torch.diag(A.sum(dim=1))
     L = D - A
 
-    plt.imshow(A)
-    plt.title('A')
-    plt.show()
+    subset_nodes = np.loadtxt(nodes_part).astype(int)
 
-    A_sub = A[0:n_nodes[0], 0:n_nodes[0]]
-    G_part = nx.from_numpy_matrix(A[0:n_nodes[0], 0:n_nodes[0]].detach().numpy())
+    #plt.imshow(A)
+    #plt.title('A')
+    #plt.show()
+
+
+    A_sub_np=edgelist_to_adjmatrix(part_graph)
+    A_sub = torch.from_numpy(A_sub_np)
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 200,
-              'mu_l21': 1,
-              'mu_MS': 8,
-              'mu_trace': 0.0,
-              'lr': 0.002,
-              'momentum': 0.1,
-              'dampening': 0,
-              'v_prox': ProxId(),
-              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
-              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L)
+
+
+    params = {'maxiter':100,
+              'mu_spectral': trial.suggest_float('mu_spectral', 0.0, 15.0),
+              'mu_l21': trial.suggest_float('mu_l21', 0.0, 15.0),
+              'mu_MS': trial.suggest_float('mu_MS', 0.0, 15.0),
+              'mu_split': trial.suggest_float('mu_split', 0.0, 15.0),
+              'mu_trace': trial.suggest_float('mu_trace', 0.0, 15.0),
+              'lr': trial.suggest_float('lr', 0.001, 0.3),
+              'v_prox': ProxNonNeg(),
+              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
+                                                               trace_upper_bound=
+                                                               1.1 * torch.trace(L)),
+              'trace_val': 0
               }
     plots = {
         'full_loss': True,
@@ -569,50 +451,64 @@ def run_on_sbm(n_nodes, p_parts,p_off):
         'diag(v)': True,
         'v_otsu': False,
         'v_kmeans': True,
-        'A edited': False,
+        'A edited': True,
         'L+E': False,
-        'ref spect vs spect': True}
+        'ref spect vs spect': True,
+        'individual loss terms': True}
+
+    loss_opt=0.0
     subgraph_isomorphism_solver = \
         SubgraphIsomorphismSolver(L, ref_spectrum, params, plots)
 
-    v, E = subgraph_isomorphism_solver.solve(G, G_part, subset_nodes)
-    # subgraph_isomorphism_solver.run_on_graphset()
-    # subgraph_isomorphism_solver.plot()
-    subgraph_isomorphism_solver.plots_on_graph(A.detach().numpy().astype(int), subset_nodes, pos, '../results/test/',
-                                               'b')
+    try:
+        v, E = subgraph_isomorphism_solver.solve()
+
+        v_new=v.detach().numpy()
+        _, v_clustered = kmeans2(v_new, 2, minit='points')
+        v_gt=np.zeros(A.size(dim=1))
+        for i in subset_nodes:
+            v_gt[i]=1
+        v_gt_inv=np.abs(v_gt-1)
+        loss_opt=min(np.linalg.norm(v_clustered-v_gt),np.linalg.norm(v_clustered-v_gt_inv))
+        print(loss_opt)
+    except:
+        print("An exception occurred")
+        loss_opt=np.sqrt(A.size(dim=1))
+        print(loss_opt)
+
+
+    return loss_opt
+    #subgraph_isomorphism_solver.plot()
+    #subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
+    # subgraph_isomorphism_solver.plots_on_graph(A.numpy().astype(int),subset_nodes, pos, '../results/test/','b')
 
 
 if __name__ == '__main__':
 
-    #run_on_graphset()
-   # run_on_sbm([5,15],0.7,0.2)
-
-    source_folder= '../data/11-01-2022_13-53-35'
-    graph_name='er_10_944_er_10_964'
-    disc_graph=source_folder+'/er_10_944_er_10_964_nc0000_full.txt'
-
-    full_graph=source_folder+'/'+graph_name+'_nc0009_full.txt'
-    part_graph=source_folder+'/'+graph_name+'_part.txt'
-    nodes_part=source_folder+'/'+graph_name+'_nodes.txt'
-    res_folder='../results/test'
-
     torch.manual_seed(12)
 
-    n1 = 5
-    n2 = 15
+    n1 = 50
+    n2 = 60
     n = n1 + n2
-    p = block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.2)
+    p = block_stochastic_graph(n1, n2, p_parts=0.4, p_off=0.3)
+
+    data = '../data/benchmark/random_graphs/part_5_rest_15/'
+
+    full_graph = data + 'ba_5_2_er_15_323_nc0006_full.txt'
+    nodes_part = data + 'ba_5_2_er_15_323_nodes.txt'
+    part_graph = data + 'ba_5_2_er_15_323_part.txt'
 
     A = torch.tril(torch.bernoulli(p)).double()
     A = (A + A.T)
+    A = torch.from_numpy(edgelist_to_adjmatrix(full_graph))
     D = torch.diag(A.sum(dim=1))
     L = D - A
 
-    subset_nodes = range(n1)
-    A_np=A.detach().numpy()
+    A_np = A.detach().numpy()
     G = nx.from_numpy_matrix(A_np)
     G_disc = copy.deepcopy(G)
-
+    subset_nodes = range(n1)
+    subset_nodes = np.loadtxt(nodes_part).astype(int)
     for edge in G_disc.edges():
         u = edge[0]
         v = edge[1]
@@ -626,23 +522,34 @@ if __name__ == '__main__':
     plt.show()
 
     A_sub = A[0:n1, 0:n1]
-    A_np_sub=A_sub.detach().numpy()
+    A_np_sub = A_sub.detach().numpy()
+    A_sub_np=edgelist_to_adjmatrix(part_graph)
+    A_sub = torch.from_numpy(A_sub_np)
     G_part = nx.from_numpy_matrix(A_np_sub)
+
+    plt.imshow(A)
+    plt.title('A')
+    plt.show()
+
+    A_sub = A[0:n1, 0:n1]
     D_sub = torch.diag(A_sub.sum(dim=1))
     L_sub = D_sub - A_sub
+
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 1000,
-              'mu_l21': 3,
-              'mu_MS': 1,
-              'mu_split': 0.0,
-              'mu_trace': 0.0,
-              'lr': 0.02,
-              'momentum': 0,
-              'dampening': 0,
+
+    params = {'maxiter': 100,
+              'mu_spectral':0.2731064475513856,
+              'mu_l21': 4.564506354623763,
+              'mu_MS': 2.2417505930940984,
+              'mu_split': 6.876046123288896,
+              'mu_trace': 7.427203409520426,
+              'lr': 0.011845777350756984,
               'v_prox': ProxNonNeg(),
-              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx")
+              #'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
               'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
-                                                               trace_upper_bound=n)
+                                                                trace_upper_bound=
+                                                                1.1*torch.trace(L)),
+              'trace_val': 0
               }
     plots = {
         'full_loss': True,
@@ -653,16 +560,15 @@ if __name__ == '__main__':
         'v_kmeans': True,
         'A edited': True,
         'L+E': False,
-        'ref spect vs spect': True}
+        'ref spect vs spect': True,
+        'individual loss terms': True}
     subgraph_isomorphism_solver = \
         SubgraphIsomorphismSolver(L, ref_spectrum, params, plots)
-    v, E = subgraph_isomorphism_solver.solve(G,G_part,subset_nodes)
-    subgraph_isomorphism_solver.plots_on_graph(A.numpy().astype(int), subset_nodes, pos, '../results/test/', 'b')
-    v_b, E_b = utils.init_groundtruth(G, G_part, subset_nodes, 5.0)
-    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
+    v, E = subgraph_isomorphism_solver.solve()
+    _, v_clustered = kmeans2(v.detach().numpy(), 2, minit='points')
+    print(v_clustered)
+    _, v_clustered = kmeans2(v.detach().numpy(), 2, minit='points')
+
     subgraph_isomorphism_solver.plot()
-    subgraph_isomorphism_solver.v=v_b.detach().numpy()
-    subgraph_isomorphism_solver.E=E_b.detach().numpy()
+    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
     subgraph_isomorphism_solver.plots_on_graph(A.numpy().astype(int),subset_nodes, pos, '../results/test/','b')
-
-

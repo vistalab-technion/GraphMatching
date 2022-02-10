@@ -19,31 +19,3 @@ def set_diag_zero(x):
     x[ind[0], ind[1]] = torch.zeros(x.shape[0])
 
     return x
-
-
-def init_groundtruth(full_graph, part_graph,part_nodes,diag_val):
-    n=len(full_graph.nodes())
-
-    #set ground truth v
-    v = torch.zeros(n, dtype=torch.float64)
-    for i in range(n):
-        if i not in part_nodes:
-            v[i,i]=diag_val
-
-    v=v.requires_grad_()
-
-    #set ground truth E
-    E = torch.zeros([n, n], dtype=torch.float64)
-    for edge in part_graph.edges():
-        u=edge[0]
-        v=edge[1]
-        if u in part_nodes and v not in part_nodes:
-            E[u,v]=-1.0
-            E[v,u]=1.0
-            E[u,u]=E[u,u]-1.0
-            E[v, v] = E[v, v] - 1.0
-
-    E = E.requires_grad_()
-
-    return v,E
-
