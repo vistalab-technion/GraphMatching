@@ -19,6 +19,8 @@ pyproximal = "*"
 pytest = "*"
 scikit-image = "*"
 kmeans1d = "*"
+torchvision = "*"
+tensorboardx = "*"
 
 [dev-packages]
 pytest = "*"

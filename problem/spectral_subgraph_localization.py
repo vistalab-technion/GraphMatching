@@ -16,6 +16,7 @@ import kmeans1d
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
+    n = n1+n2
     p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
 
     p22 = set_diag_zero(p_parts * torch.ones(n2, n2))
@@ -34,6 +35,40 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 class SubgraphIsomorphismSolver:
 
     def __init__(self, L, ref_spectrum, params, plots):
+
+        """
+        Proximal algorithm solver for subgraph spectral matching.
+
+        :param L: Laplacian of full graph
+        :param ref_spectrum: spectrum of reference graph (i.e., the subgraph)
+        :param params: parameters for the algorithm and solver. For example:
+            params = {'maxiter': 100,
+              'mu_spectral': 1,
+              'mu_l21': 1,
+              'mu_MS': 1,
+              'mu_split': 1,
+              'mu_trace': 0.0,
+              'lr': 0.02,
+              'v_prox': ProxNonNeg(),
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
+                                                                trace_upper_bound=
+                                                                1.1*torch.trace(L)),
+              'trace_val': 0
+              }
+        :param plots: flags for which plots to produce.
+        The following plots are supported:
+                plots = {'full_loss': True,
+                        'E': True,
+                        'v': True,
+                        'diag(v)': True,
+                        'v_otsu': True,
+                        'v_kmeans': True,
+                        'A edited': True,
+                        'L+E': True,
+                        'ref spect vs spect': True,
+                        'individual loss terms': True}
+        """
+
         self.L = L
         self.ref_spectrum = ref_spectrum
         self.params = params
@@ -50,6 +85,7 @@ class SubgraphIsomorphismSolver:
         self.mu_trace = self.params['mu_trace']
         self.mu_split = self.params['mu_split']
         self.trace_val = self.params['trace_val']
+
 
     def solve(self):
         L = self.L
@@ -158,6 +194,9 @@ class SubgraphIsomorphismSolver:
         return (torch.trace(E) - trace_val) ** 2
 
     def plot(self):
+        """
+        produces various plots
+        """
         if self.plots['full_loss']:
             plt.loglog(self.loss_vals, 'b')
             plt.title('full loss')
@@ -277,10 +316,16 @@ class SubgraphIsomorphismSolver:
 
             plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
                                 wspace=0.5,
-                                hspace=1)
+                                hspace=2)
             plt.show()
 
-    def plot_on_graph(self, A):
+    def plot_on_graph(self, A, n_subgraph):
+        """
+        plots the potentials E and v on the full graph
+
+        :param A: adjacency of full graph
+        :param n_subgraph: size of subgraph
+        """
         vmin = np.min(self.v)
         vmax = np.max(self.v)
 
@@ -310,7 +355,7 @@ class SubgraphIsomorphismSolver:
 
         vmin = np.min(weights)
         vmax = np.max(weights)
-        subset_nodes = range(n1)
+        subset_nodes = range(n_subgraph)
         # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
 
         color_map = []
