@@ -37,7 +37,7 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum, params, save_loss_terms = True):
+    def __init__(self, L, ref_spectrum, params, save_loss_terms=True):
 
         """
         Proximal algorithm solver for subgraph spectral matching.
@@ -78,7 +78,6 @@ class SubgraphIsomorphismSolver:
         self.mu_trace = self.params['mu_trace']
         self.mu_split = self.params['mu_split']
         self.trace_val = self.params['trace_val']
-        self.show_iter = self.params['show_iter']
 
         # init
         n = L.shape[0]
@@ -86,7 +85,7 @@ class SubgraphIsomorphismSolver:
         E = torch.zeros([n, n], dtype=torch.float64)
         self.E = double_centering(0.5 * (E + E.T)).requires_grad_()
 
-    def solve(self):
+    def solve(self, maxiter=100, show_iter=10):
         L = self.L
         ref_spectrum = self.ref_spectrum
         n = L.shape[0]
@@ -99,7 +98,7 @@ class SubgraphIsomorphismSolver:
 
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
-        maxiter = self.params['maxiter']
+        # maxiter = self.params['maxiter']
         lr = self.params['lr']
         lamb = self.mu_l21 * lr  # This setting is important!
         pgm = PGM(params=[{'params': v}, {'params': E}],
@@ -122,7 +121,7 @@ class SubgraphIsomorphismSolver:
             pgm.step(lamb=lamb)
             loss_vals.append(
                 full_loss_function(ref_spectrum, L, E.detach(), v.detach()))
-            if (i + 1) % self.show_iter == 0:
+            if (i + 1) % show_iter == 0:
                 self.plot_loss(plotlosses, loss_vals[-1])
 
         print("done")
@@ -226,7 +225,7 @@ class SubgraphIsomorphismSolver:
         v = self.v.detach().numpy()
 
         if plots['full_loss']:
-            plt.loglog(self.loss_vals, 'b')
+            plt.plot(self.loss_vals, 'b')
             plt.title('full loss')
             plt.xlabel('iter')
             plt.show()
