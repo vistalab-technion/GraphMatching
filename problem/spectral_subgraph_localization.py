@@ -13,9 +13,13 @@ from scipy.cluster.vq import kmeans2
 from skimage.filters.thresholding import threshold_otsu
 import networkx as nx
 import kmeans1d
+from livelossplot import PlotLosses
+from livelossplot.outputs import MatplotlibPlot
+from time import sleep
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
+    n = n1 + n2
     p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
 
     p22 = set_diag_zero(p_parts * torch.ones(n2, n2))
@@ -33,23 +37,54 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum, params, plots):
+    def __init__(self, L, ref_spectrum, params, save_loss_terms = True):
+
+        """
+        Proximal algorithm solver for subgraph spectral matching.
+
+        :param L: Laplacian of full graph
+        :param ref_spectrum: spectrum of reference graph (i.e., the subgraph)
+        :param params: parameters for the algorithm and solver. For example:
+            params =
+            {'maxiter': 100,
+              'show_iter': 10,
+              'mu_spectral': 1,
+              'mu_l21': 1,
+              'mu_MS': 1,
+              'mu_split': 1,
+              'mu_trace': 0.0,
+              'lr': 0.02,
+              'v_prox': ProxNonNeg(),
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
+                                                                trace_upper_bound=
+                                                                1.1*torch.trace(L)),
+              'trace_val': 0
+              }
+        :param save_loss_terms: flag for saving the individual loss terms
+        """
+
         self.L = L
         self.ref_spectrum = ref_spectrum
         self.params = params
-        self.plots = plots
         self.spectrum_alignment_terms = []
         self.MS_reg_terms = []
         self.trace_reg_terms = []
         self.graph_split_terms = []
         self.l21_terms = []
-        self.save_individual_losses = plots['individual loss terms']
+        self.save_individual_losses = save_loss_terms
         self.mu_spectral = self.params['mu_spectral']
         self.mu_l21 = self.params['mu_l21']
         self.mu_MS = self.params['mu_MS']
         self.mu_trace = self.params['mu_trace']
         self.mu_split = self.params['mu_split']
         self.trace_val = self.params['trace_val']
+        self.show_iter = self.params['show_iter']
+
+        # init
+        n = L.shape[0]
+        self.v = torch.ones(n, requires_grad=True, dtype=torch.float64)
+        E = torch.zeros([n, n], dtype=torch.float64)
+        self.E = double_centering(0.5 * (E + E.T)).requires_grad_()
 
     def solve(self):
         L = self.L
@@ -57,9 +92,8 @@ class SubgraphIsomorphismSolver:
         n = L.shape[0]
 
         # init
-        v = torch.ones(n, requires_grad=True, dtype=torch.float64)
-        E = torch.zeros([n, n], dtype=torch.float64)
-        E = double_centering(0.5 * (E + E.T)).requires_grad_()
+        v = self.v
+        E = self.E
         v_prox = self.params['v_prox']
         E_prox = self.params['E_prox']
 
@@ -77,6 +111,10 @@ class SubgraphIsomorphismSolver:
             + self.non_smooth_loss_function(E)
 
         loss_vals = []
+
+        groups = {'log-loss': ['loss']}
+        plotlosses = PlotLosses(groups=groups, outputs=[MatplotlibPlot()])
+
         for i in tqdm(range(maxiter)):
             pgm.zero_grad()
             loss = self.smooth_loss_function(ref_spectrum, L, E, v)
@@ -84,14 +122,17 @@ class SubgraphIsomorphismSolver:
             pgm.step(lamb=lamb)
             loss_vals.append(
                 full_loss_function(ref_spectrum, L, E.detach(), v.detach()))
+            if (i + 1) % self.show_iter == 0:
+                self.plot_loss(plotlosses, loss_vals[-1])
+
         print("done")
         L_edited = L + E.detach() + torch.diag(v.detach())
         spectrum = torch.linalg.eigvalsh(L_edited)
         k = ref_spectrum.shape[0]
 
         self.loss_vals = loss_vals
-        self.E = E.detach().numpy()
-        self.v = v.detach().numpy()
+        self.E = E
+        self.v = v
         self.spectrum = spectrum.detach().numpy()
         # self.plots()
 
@@ -144,7 +185,7 @@ class SubgraphIsomorphismSolver:
     def graph_split_loss(L, E):
         L_edited = L + E
         spectrum = torch.linalg.eigvalsh(L_edited)
-        #loss = torch.norm(spectrum[0:2]) ** 2
+        # loss = torch.norm(spectrum[0:2]) ** 2
         loss = spectrum[1]
         # print(loss)
         return loss
@@ -157,25 +198,51 @@ class SubgraphIsomorphismSolver:
     def trace_reg(E, trace_val=0):
         return (torch.trace(E) - trace_val) ** 2
 
-    def plot(self):
-        if self.plots['full_loss']:
+    def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
+        plotlosses.update({
+            'loss': loss_val,
+        })
+        plotlosses.send()
+        sleep(sleep_time)
+
+    def plot(self, plots):
+        """
+        produces various plots
+
+        :param plots: flags for which plots to produce.
+        The following plots are supported:
+                plots = {'full_loss': True,
+                        'E': True,
+                        'v': True,
+                        'diag(v)': True,
+                        'v_otsu': True,
+                        'v_kmeans': True,
+                        'A edited': True,
+                        'L+E': True,
+                        'ref spect vs spect': True,
+                        'individual loss terms': True}
+        """
+        E = self.E.detach().numpy()
+        v = self.v.detach().numpy()
+
+        if plots['full_loss']:
             plt.loglog(self.loss_vals, 'b')
             plt.title('full loss')
             plt.xlabel('iter')
             plt.show()
 
-        if self.plots['E']:
+        if plots['E']:
             ax = plt.subplot()
-            im = ax.imshow(self.E - np.diag(np.diag(self.E)))
+            im = ax.imshow(E - np.diag(np.diag(E)))
             divider = make_axes_locatable(ax)
             ax.set_title('E -diag(E)')
             cax = divider.append_axes("right", size="5%", pad=0.05)
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['L+E']:
+        if plots['L+E']:
             ax = plt.subplot()
-            L_edited = self.E + self.L.numpy()
+            L_edited = E + self.L.numpy()
             im = ax.imshow(L_edited)
             divider = make_axes_locatable(ax)
             ax.set_title('L+E')
@@ -183,9 +250,9 @@ class SubgraphIsomorphismSolver:
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['A edited']:
+        if plots['A edited']:
             ax = plt.subplot()
-            A_edited = -set_diag_zero(self.E + self.L.numpy())
+            A_edited = -set_diag_zero(E + self.L.numpy())
             im = ax.imshow(A_edited)
             divider = make_axes_locatable(ax)
             ax.set_title('A edited')
@@ -193,24 +260,24 @@ class SubgraphIsomorphismSolver:
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['v']:
-            plt.plot(np.sort(self.v), 'xr')
+        if plots['v']:
+            plt.plot(np.sort(v), 'xr')
             plt.title('v')
             plt.show()
 
-        if self.plots['diag(v)']:
+        if plots['diag(v)']:
             ax = plt.subplot()
-            im = ax.imshow(np.diag(self.v))
+            im = ax.imshow(np.diag(v))
             divider = make_axes_locatable(ax)
             ax.set_title('diag(v)')
             cax = divider.append_axes("right", size="5%", pad=0.05)
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['v_otsu']:
+        if plots['v_otsu']:
             ax = plt.subplot()
             # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = self.v - np.min(self.v)
+            v = v - np.min(v)
             v = v / np.max(v)
             threshold = threshold_otsu(v, nbins=10)
             v_otsu = (v > threshold).astype(float)
@@ -221,10 +288,10 @@ class SubgraphIsomorphismSolver:
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['v_kmeans']:
+        if plots['v_kmeans']:
             ax = plt.subplot()
             # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = self.v - np.min(self.v)
+            v = v - np.min(v)
             v = v / np.max(v)
             v_clustered, centroids = kmeans1d.cluster(v, k=2)
             im = ax.imshow(np.diag(v_clustered))
@@ -234,13 +301,13 @@ class SubgraphIsomorphismSolver:
             plt.colorbar(im, cax=cax)
             plt.show()
 
-        if self.plots['ref spect vs spect']:
+        if plots['ref spect vs spect']:
             plt.plot(self.ref_spectrum.numpy(), 'og')
             plt.plot(self.spectrum, 'xr')
             plt.title('ref spect vs spect')
             plt.show()
 
-        if self.plots['individual loss terms']:
+        if plots['individual loss terms']:
             font_color = "r"
             # Create two subplots and unpack the output array immediately
             fig, axes = plt.subplots(nrows=3, ncols=2)
@@ -248,7 +315,8 @@ class SubgraphIsomorphismSolver:
             ax[0].loglog(self.spectrum_alignment_terms)
             ax[0].set_ylabel('loss', c=font_color)
             ax[0].set_xlabel('iteration', c=font_color)
-            ax[0].set_title(f'spectral alignment, mu = {self.mu_spectral}', c=font_color)
+            ax[0].set_title(f'spectral alignment, mu = {self.mu_spectral}',
+                            c=font_color)
 
             ax[1].loglog(self.MS_reg_terms)
             ax[1].set_ylabel('loss', c=font_color)
@@ -277,12 +345,22 @@ class SubgraphIsomorphismSolver:
 
             plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
                                 wspace=0.5,
-                                hspace=1)
+                                hspace=2)
             plt.show()
 
-    def plot_on_graph(self, A):
-        vmin = np.min(self.v)
-        vmax = np.max(self.v)
+    @staticmethod
+    def plot_on_graph(A, n_subgraph, v, E):
+        """
+        plots the potentials E and v on the full graph
+
+        :param A: adjacency of full graph
+        :param n_subgraph: size of subgraph
+        """
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=[10, 10])
+        ax = axes.flat
+
+        vmin = np.min(v)
+        vmax = np.max(v)
 
         G = nx.from_numpy_matrix(A)
         pos = nx.spring_layout(G)
@@ -292,25 +370,30 @@ class SubgraphIsomorphismSolver:
         # for edge in G.edges():
 
         for u, w, d in G.edges(data=True):
-            d['weight'] = self.E[u, w]
+            d['weight'] = E[u, w]
 
         edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
 
         cmap = plt.cm.gnuplot
-        ax = plt.subplot()
-        nx.draw(G, node_color=self.v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
+        # ax = plt.subplot()
+        nx.draw(G, node_color=v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
                 node_size=30,
-                pos=pos, ax=ax)
+                pos=pos, ax=ax[0])
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm._A = []
-        ax.set_title('Nodes colored by potential v')
-        plt.colorbar(sm)
+        ax[0].set_title('Nodes colored by potential v')
+        # create an axes on the right side of ax. The width of cax will be 5%
+        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        divider = make_axes_locatable(ax[0])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(sm, ax=ax[0], cax=cax)
+        ax[0].set_aspect('equal', 'box')
+
         #  plt.savefig(file+'.png')
-        plt.show()
 
         vmin = np.min(weights)
         vmax = np.max(weights)
-        subset_nodes = range(n1)
+        subset_nodes = range(n_subgraph)
         # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
 
         color_map = []
@@ -320,15 +403,26 @@ class SubgraphIsomorphismSolver:
             else:
                 color_map.append('green')
         cmap = plt.cm.gnuplot
-        ax = plt.subplot()
+        # ax = plt.subplot()
         nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0,
                 edge_cmap=cmap, vmin=vmin,
-                vmax=vmax, cmap=cmap, node_size=30, pos=pos)
+                vmax=vmax, cmap=cmap, node_size=30, pos=pos, ax=ax[1])
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm._A = []
-        ax.set_title('Edges colored by E')
-        plt.colorbar(sm)
+        ax[1].set_title('Edges colored by E')
         #  plt.savefig(file+'.png')
+
+        # create an axes on the right side of ax. The width of cax will be 5%
+        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        divider = make_axes_locatable(ax[1])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(sm, ax=ax[1], cax=cax)
+        ax[1].set_aspect('equal', 'box')
+
+        # plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
+        #                     wspace=2,
+        #                     hspace=None)
+
         plt.show()
 
 
@@ -378,6 +472,7 @@ if __name__ == '__main__':
     L_sub = D_sub - A_sub
     ref_spectrum = torch.linalg.eigvalsh(L_sub)
     params = {'maxiter': 100,
+              'show_iter': 10,
               'mu_spectral': 1,
               'mu_l21': 1,
               'mu_MS': 1,
@@ -385,10 +480,10 @@ if __name__ == '__main__':
               'mu_trace': 0.0,
               'lr': 0.02,
               'v_prox': ProxNonNeg(),
-              #'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
+              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
               'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
-                                                                trace_upper_bound=
-                                                                1.1*torch.trace(L)),
+                                                               trace_upper_bound=
+                                                               1.1 * torch.trace(L)),
               'trace_val': 0
               }
     plots = {
@@ -403,7 +498,10 @@ if __name__ == '__main__':
         'ref spect vs spect': True,
         'individual loss terms': True}
     subgraph_isomorphism_solver = \
-        SubgraphIsomorphismSolver(L, ref_spectrum, params, plots)
+        SubgraphIsomorphismSolver(L, ref_spectrum, params)
     v, E = subgraph_isomorphism_solver.solve()
-    subgraph_isomorphism_solver.plot()
-    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int))
+    subgraph_isomorphism_solver.plot(plots)
+    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int),
+                                              n1,
+                                              subgraph_isomorphism_solver.v,
+                                              subgraph_isomorphism_solver.E)

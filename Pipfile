@@ -19,6 +19,7 @@ pyproximal = "*"
 pytest = "*"
 scikit-image = "*"
 kmeans1d = "*"
+livelossplot = "*"
 
 [dev-packages]
 pytest = "*"
