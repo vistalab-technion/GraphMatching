@@ -37,7 +37,8 @@ def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
 
 class SubgraphIsomorphismSolver:
 
-    def __init__(self, L, ref_spectrum, params, save_loss_terms=True):
+    def __init__(self, L, ref_spectrum, problem_params, solver_params,
+                 save_loss_terms=True):
 
         """
         Proximal algorithm solver for subgraph spectral matching.
@@ -65,27 +66,70 @@ class SubgraphIsomorphismSolver:
 
         self.L = L
         self.ref_spectrum = ref_spectrum
-        self.params = params
         self.spectrum_alignment_terms = []
         self.MS_reg_terms = []
         self.trace_reg_terms = []
         self.graph_split_terms = []
         self.l21_terms = []
         self.save_individual_losses = save_loss_terms
-        self.mu_spectral = self.params['mu_spectral']
-        self.mu_l21 = self.params['mu_l21']
-        self.mu_MS = self.params['mu_MS']
-        self.mu_trace = self.params['mu_trace']
-        self.mu_split = self.params['mu_split']
-        self.trace_val = self.params['trace_val']
+        self.solver_params = solver_params
+        self.problem_params = problem_params
+        self.set_problem_params(problem_params)
+        self.set_solver_params(solver_params)
 
         # init
-        n = L.shape[0]
-        self.v = torch.ones(n, requires_grad=True, dtype=torch.float64)
-        E = torch.zeros([n, n], dtype=torch.float64)
-        self.E = double_centering(0.5 * (E + E.T)).requires_grad_()
+        self.set_init()
 
-    def solve(self, maxiter=100, show_iter=10):
+    def set_init(self, v0=None, E0=None):
+        n = self.L.shape[0]
+        if v0 is None:
+            self.v = torch.ones(n, requires_grad=self.train_v, dtype=torch.float64)
+        else:
+            self.v = v0
+
+        if E0 is None:
+            # init
+            E = torch.zeros([n, n], dtype=torch.float64)
+            self.E = \
+                double_centering(0.5 * (E + E.T)).requires_grad_(
+                    requires_grad=self.train_E)
+        else:
+            self.E = E0
+
+    def set_optim(self, v, E):
+        lamb = self.mu_l21 * self.lr  # This setting is important!
+
+        if self.train_E and self.train_v:
+            optim_params = [{'params': v}, {'params': E}]
+            proxs = [self.v_prox, self.E_prox]
+        elif not self.train_E and self.train_v:
+            optim_params = [{'params': v}]
+            proxs = [self.v_prox]
+        elif self.train_E and not self.train_v:
+            optim_params = [{'params': E}]
+            proxs = [self.E_prox]
+
+        pgm = PGM(params=optim_params,
+                  proxs=proxs,
+                  lr=self.lr)
+        return pgm, lamb
+
+    def set_problem_params(self, problem_params):
+        self.mu_spectral = problem_params['mu_spectral']
+        self.mu_l21 = problem_params['mu_l21']
+        self.mu_MS = problem_params['mu_MS']
+        self.mu_trace = problem_params['mu_trace']
+        self.mu_split = problem_params['mu_split']
+        self.trace_val = problem_params['trace_val']
+
+    def set_solver_params(self, solver_params):
+        self.v_prox = solver_params['v_prox']
+        self.E_prox = solver_params['E_prox']
+        self.lr = solver_params['lr']
+        self.train_v = solver_params['train_v']
+        self.train_E = solver_params['train_E']
+
+    def solve(self, maxiter=100, show_iter=10, verbose=False):
         L = self.L
         ref_spectrum = self.ref_spectrum
         n = L.shape[0]
@@ -93,17 +137,12 @@ class SubgraphIsomorphismSolver:
         # init
         v = self.v
         E = self.E
-        v_prox = self.params['v_prox']
-        E_prox = self.params['E_prox']
 
+        # for linear inverse problems this is the optimal setting for the step size
         # s = torch.linalg.svdvals(A)
         # lr = 1 / (1.1 * s[0] ** 2)
-        # maxiter = self.params['maxiter']
-        lr = self.params['lr']
-        lamb = self.mu_l21 * lr  # This setting is important!
-        pgm = PGM(params=[{'params': v}, {'params': E}],
-                  proxs=[v_prox, E_prox],
-                  lr=lr)
+
+        pgm, lamb = self.set_optim(v, E)
 
         full_loss_function = lambda ref, L, E, v: \
             self.smooth_loss_function(ref, L, E, v) \
@@ -135,11 +174,12 @@ class SubgraphIsomorphismSolver:
         self.spectrum = spectrum.detach().numpy()
         # self.plots()
 
-        print(f"v= {v}")
-        print(f"E= {E}")
-        print(f"lambda= {spectrum[0:k]}")
-        print(f"lambda*= {ref_spectrum}")
-        print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
+        if verbose:
+            print(f"v= {v}")
+            print(f"E= {E}")
+            print(f"lambda= {spectrum[0:k]}")
+            print(f"lambda*= {ref_spectrum}")
+            print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
         return v, E
 
     def non_smooth_loss_function(self, E):
