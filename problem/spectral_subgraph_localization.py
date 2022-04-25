@@ -96,6 +96,9 @@ class SubgraphIsomorphismSolver:
         else:
             self.E = E0
 
+        self.E.requires_grad = self.train_E
+        self.v.requires_grad = self.train_v
+
     def set_optim(self, v, E):
         lamb = self.mu_l21 * self.lr  # This setting is important!
 
@@ -109,6 +112,8 @@ class SubgraphIsomorphismSolver:
             optim_params = [{'params': E}]
             proxs = [self.E_prox]
 
+        v.requires_grad = self.train_v
+        E.requires_grad = self.train_E
         pgm = PGM(params=optim_params,
                   proxs=proxs,
                   lr=self.lr)
