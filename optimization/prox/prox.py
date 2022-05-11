@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from logging import exception
 import numpy as np
+import scipy.linalg as linalg
+from scipy.linalg import qr, pinv
 from torch import stack
 from tqdm import tqdm
 import cvxpy as cp
@@ -52,6 +54,34 @@ class ProxId(ProxBase):
         return z
 
 
+class ProxSphere(ProxBase):
+    """
+    Projection on sphere prox
+    """
+
+    def __init__(self, solver="", radius=1):
+        self.radius = radius
+        super().__init__(solver=solver)
+
+    def __call__(self, z: Tensor, lamb: float):
+        return self.radius * z / torch.norm(z)
+
+
+class ProxNullspace(ProxBase):
+    """
+    Projection on sphere prox
+    """
+
+    def __init__(self, A, solver=""):
+        self.A = A
+        Q, R = qr(A)
+        self.P = torch.eye(A.shape[0]) - torch.tensor(Q @ Q.T)
+        super().__init__(solver=solver)
+
+    def __call__(self, z: Tensor, lamb: float):
+        return self.radius * z / torch.norm(z)
+
+
 class ProxNonNeg(ProxBase):
     """
     Identity prox (pass through)
@@ -79,7 +109,7 @@ class ProxL1(ProxBase):
             return self._prox(z=z, lamb=lamb)
 
     def _prox(self, z: Tensor, lamb: float):
-        return torch.sign(z)*\
+        return torch.sign(z) * \
                torch.max(torch.abs(z) - lamb, torch.zeros_like(z))
 
     def _cvx_prox(self, z: Tensor, lamb: float):

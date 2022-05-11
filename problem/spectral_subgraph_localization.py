@@ -16,6 +16,7 @@ import kmeans1d
 from livelossplot import PlotLosses
 from livelossplot.outputs import MatplotlibPlot
 from time import sleep
+from scipy.linalg import qr, pinv
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
@@ -136,6 +137,10 @@ class SubgraphIsomorphismSolver:
 
     def solve(self, maxiter=100, show_iter=10, verbose=False):
         L = self.L
+
+        # Q, R = qr(L.numpy())
+        # self.P = torch.eye(L.shape[0]) - torch.tensor(Q @ Q.T)
+
         ref_spectrum = self.ref_spectrum
         n = L.shape[0]
 
@@ -217,8 +222,7 @@ class SubgraphIsomorphismSolver:
 
         return smooth_loss_term
 
-    @staticmethod
-    def spectrum_alignment_loss(ref_spectrum, L, E, v):
+    def spectrum_alignment_loss(self, ref_spectrum, L, E, v):
         k = ref_spectrum.shape[0]
         Hamiltonian = L + E + torch.diag(v)
         spectrum = torch.linalg.eigvalsh(Hamiltonian)
