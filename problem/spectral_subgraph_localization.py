@@ -146,7 +146,7 @@ class SubgraphIsomorphismSolver:
             v, _ = self._solve(maxiter=max_inner_iters,
                                show_iter=show_iter,
                                verbose=verbose)
-            E = self.E_from_v(self.v.detach(), self.A)
+            E, _ = self.E_from_v(self.v.detach(), self.A)
             self.set_init(E0=E, v0=v)
             self.v = v
             self.E = E
@@ -268,9 +268,9 @@ class SubgraphIsomorphismSolver:
         v_ = v - torch.min(v)
         if torch.max(v_) != 0:
             v_ = v_ / torch.max(v_)
-        E = -torch.abs(v_[:, None] - v_[:, None].T) * A
-        E = torch.diag(E.sum(axis=1)) - E
-        return E
+        S = -torch.abs(v_[:, None] - v_[:, None].T) * A
+        E = torch.diag(S.sum(axis=1)) - S
+        return E, S
 
     def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
         plotlosses.update({
