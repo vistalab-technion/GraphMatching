@@ -1,5 +1,5 @@
 import torch
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score,jaccard_score
 import numpy as np
 import kmeans1d
 from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
@@ -9,6 +9,9 @@ class MetricEvaluator:
     def __init__(self, A):
         super().__init__()
         self.A = A
+
+    def iou(self,v_np, v_gt):
+        return jaccard_score(v_np,v_gt,average=None)
 
     def accuracy(self, v_np, v_gt):
         v_clustered, v_, e_clustered, e_ = \
