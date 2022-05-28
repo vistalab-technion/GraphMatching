@@ -136,13 +136,17 @@ class SubgraphIsomorphismSolver:
         self.lr = solver_params['lr']
         self.train_v = solver_params['train_v']
         self.train_E = solver_params['train_E']
+        self.a_tol = solver_params['a_tol']
+        self.r_tol = solver_params['r_tol']
 
     def solve(self,
               max_outer_iters=10,
               max_inner_iters=10,
               show_iter=10,
               verbose=False):
-        for i in range(max_outer_iters):
+        outer_iter_counter = 0
+        converged_outer = False
+        while not converged_outer:
             v, _ = self._solve(maxiter=max_inner_iters,
                                show_iter=show_iter,
                                verbose=verbose)
@@ -150,6 +154,9 @@ class SubgraphIsomorphismSolver:
             self.set_init(E0=E, v0=v)
             self.v = v
             self.E = E
+            outer_iter_counter += 1
+            converged_outer = self._check_convergence(self.v.detach(), self.a_tol)
+            converged_outer = converged_outer or (outer_iter_counter > max_outer_iters)
         return v, E
 
     def _solve(self, maxiter=100, show_iter=10, verbose=False):
@@ -179,17 +186,28 @@ class SubgraphIsomorphismSolver:
 
         groups = {'log-loss': ['loss']}
         plotlosses = PlotLosses(groups=groups, outputs=[MatplotlibPlot()])
-
-        for i in tqdm(range(maxiter)):
+        converged_inner = False
+        pbar = tqdm(desc='optimizing v', total=maxiter)
+        # for i in tqdm(range(maxiter)):
+        iter_count = 0
+        while not converged_inner:
+            v_prev = self.v.detach()
             pgm.zero_grad()
             loss = self.smooth_loss_function(ref_spectrum, L, E, v)
             loss.backward()
             pgm.step(lamb=lamb)
             loss_vals.append(
                 full_loss_function(ref_spectrum, L, E.detach(), v.detach()))
-            if (i + 1) % show_iter == 0:
+            if (iter_count + 1) % show_iter == 0:
                 self.plot_loss(plotlosses, loss_vals[-1])
-
+            iter_count += 1
+            pbar.update(iter_count)
+            converged_inner = self._check_convergence(v_prev=v_prev,
+                                                      v=self.v.detach(),
+                                                      r_tol=self.r_tol,
+                                                      a_tol=self.a_tol)
+            converged_inner = converged_inner or (iter_count > maxiter)
+        pbar.close()
         print("done")
         L_edited = L + E.detach() + torch.diag(v.detach())
         spectrum = torch.linalg.eigvalsh(L_edited)
@@ -208,6 +226,21 @@ class SubgraphIsomorphismSolver:
             print(f"lambda*= {ref_spectrum}")
             print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
         return v, E
+
+    def _check_convergence(self, v, a_tol, v_prev=None, r_tol=None):
+        # Todo: change conditions to follow kkt
+        v_binary, E_binary = self.threshold(v_np=v.detach().numpy())
+        eig_max = torch.max(self.ref_spectrum).numpy()
+        c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
+        loss = self.smooth_loss_function(self.ref_spectrum, self.L,
+                                         torch.tensor(E_binary),
+                                         torch.tensor(c * v_binary))
+        condition1 = loss < a_tol
+        if r_tol is not None:
+            condition2 = (torch.norm(v - v_prev) / torch.norm(v)) < r_tol
+        else:
+            condition2 = False
+        return condition1 or condition2
 
     def non_smooth_loss_function(self, E):
         l21_loss = l21(E)
