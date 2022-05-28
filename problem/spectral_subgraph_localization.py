@@ -265,12 +265,18 @@ class SubgraphIsomorphismSolver:
 
     @staticmethod
     def E_from_v(v, A):
-        v_ = v - torch.min(v)
-        if torch.max(v_) != 0:
-            v_ = v_ / torch.max(v_)
+        v_ = SubgraphIsomorphismSolver.indicator_from_v(v)
         S = -torch.abs(v_[:, None] - v_[:, None].T) * A
         E = torch.diag(S.sum(axis=1)) - S
         return E, S
+
+    @staticmethod
+    def indicator_from_v(v):
+        v_ = v - torch.min(v)
+        if torch.max(v_) != 0:
+            v_ = v_ / torch.max(v_)
+        # v_ = torch.ones_like(v_,)-v_
+        return v_
 
     def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
         plotlosses.update({
