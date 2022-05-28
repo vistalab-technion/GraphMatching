@@ -499,6 +499,14 @@ class SubgraphIsomorphismSolver:
 
         plt.show()
 
+    def threshold(self, v_np):
+        v_ = v_np - np.min(v_np)
+        v_ = v_ / np.max(v_)
+        v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+        v_clustered = torch.tensor(v_clustered, dtype=torch.float64)
+        E_clustered, _ = self.E_from_v(v_clustered, self.A)
+        return v_clustered, E_clustered
+
 
 def edgelist_to_adjmatrix(edgeList_file):
     edge_list = np.loadtxt(edgeList_file, usecols=range(2))
