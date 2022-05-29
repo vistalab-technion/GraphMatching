@@ -74,6 +74,7 @@ class SubgraphIsomorphismSolver:
         self.trace_reg_terms = []
         self.graph_split_terms = []
         self.l21_terms = []
+        self.loss_vals = []
         self.save_individual_losses = save_loss_terms
         self.solver_params = solver_params
         self.problem_params = problem_params
@@ -86,7 +87,10 @@ class SubgraphIsomorphismSolver:
     def set_init(self, v0=None, E0=None):
         n = self.L.shape[0]
         if v0 is None:
-            self.v = torch.ones(n, requires_grad=self.train_v, dtype=torch.float64)
+            eig_max = torch.max(self.ref_spectrum)
+            c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
+            v0 = (c / np.sqrt(n)) * np.ones(n)
+            self.v = torch.tensor(v0, requires_grad=self.train_v, dtype=torch.float64)
         else:
             self.v = v0
 
@@ -147,7 +151,7 @@ class SubgraphIsomorphismSolver:
         outer_iter_counter = 0
         converged_outer = False
         while not converged_outer:
-            v, _ = self._solve(maxiter=max_inner_iters,
+            v, _ = self._solve(maxiter_inner=max_inner_iters,
                                show_iter=show_iter,
                                verbose=verbose)
             E, _ = self.E_from_v(self.v.detach(), self.A)
@@ -156,10 +160,10 @@ class SubgraphIsomorphismSolver:
             self.E = E
             outer_iter_counter += 1
             converged_outer = self._check_convergence(self.v.detach(), self.a_tol)
-            converged_outer = converged_outer or (outer_iter_counter > max_outer_iters)
+            converged_outer = converged_outer or (outer_iter_counter >= max_outer_iters)
         return v, E
 
-    def _solve(self, maxiter=100, show_iter=10, verbose=False):
+    def _solve(self, maxiter_inner=100, show_iter=10, verbose=False):
         L = self.L
 
         # Q, R = qr(L.numpy())
@@ -179,25 +183,27 @@ class SubgraphIsomorphismSolver:
         pgm, lamb = self.set_optim(v, E)
 
         full_loss_function = lambda ref, L, E, v: \
-            self.smooth_loss_function(ref, L, E, v) \
+            self.smooth_loss_function(ref, L, E, v, False) \
             + self.non_smooth_loss_function(E)
 
         loss_vals = []
 
-        groups = {'log-loss': ['loss']}
+        groups = {'loss': ['loss']}
         plotlosses = PlotLosses(groups=groups, outputs=[MatplotlibPlot()])
         converged_inner = False
-        pbar = tqdm(desc='optimizing v', total=maxiter)
+        pbar = tqdm(desc='optimizing v', total=maxiter_inner)
         # for i in tqdm(range(maxiter)):
         iter_count = 0
         while not converged_inner:
             v_prev = self.v.detach()
             pgm.zero_grad()
-            loss = self.smooth_loss_function(ref_spectrum, L, E, v)
-            loss.backward()
-            pgm.step(lamb=lamb)
+            loss = \
+                self.smooth_loss_function(ref_spectrum, L, E, v,
+                                          self.save_individual_losses)
             loss_vals.append(
                 full_loss_function(ref_spectrum, L, E.detach(), v.detach()))
+            loss.backward()
+            pgm.step(lamb=lamb)
             if (iter_count + 1) % show_iter == 0:
                 self.plot_loss(plotlosses, loss_vals[-1])
             iter_count += 1
@@ -206,14 +212,14 @@ class SubgraphIsomorphismSolver:
                                                       v=self.v.detach(),
                                                       r_tol=self.r_tol,
                                                       a_tol=self.a_tol)
-            converged_inner = converged_inner or (iter_count > maxiter)
+            converged_inner = converged_inner or (iter_count >= maxiter_inner)
         pbar.close()
         print("done")
         L_edited = L + E.detach() + torch.diag(v.detach())
         spectrum = torch.linalg.eigvalsh(L_edited)
         k = ref_spectrum.shape[0]
 
-        self.loss_vals = loss_vals
+        self.loss_vals = [*self.loss_vals, *loss_vals]
         self.E = E
         self.v = v
         self.spectrum = spectrum.detach().numpy()
@@ -229,12 +235,13 @@ class SubgraphIsomorphismSolver:
 
     def _check_convergence(self, v, a_tol, v_prev=None, r_tol=None):
         # Todo: change conditions to follow kkt
+        # Todo: change conditions to follow kkt
         v_binary, E_binary = self.threshold(v_np=v.detach().numpy())
         eig_max = torch.max(self.ref_spectrum).numpy()
         c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
         loss = self.smooth_loss_function(self.ref_spectrum, self.L,
                                          torch.tensor(E_binary),
-                                         torch.tensor(c * v_binary))
+                                         torch.tensor(c * v_binary), False)
         condition1 = loss < a_tol
         if r_tol is not None:
             condition2 = (torch.norm(v - v_prev) / torch.norm(v)) < r_tol
@@ -250,7 +257,7 @@ class SubgraphIsomorphismSolver:
 
         return self.mu_l21 * l21(E)
 
-    def smooth_loss_function(self, ref_spectrum, L, E, v):
+    def smooth_loss_function(self, ref_spectrum, L, E, v, save_individual_losses=False):
 
         spectrum_alignment_term = self.spectrum_alignment_loss(ref_spectrum, L, E, v)
         MS_reg_term = self.MSreg(L, E, v)
@@ -263,7 +270,7 @@ class SubgraphIsomorphismSolver:
             + self.mu_trace * trace_reg_term \
             + self.mu_split * graph_split_term
 
-        if self.save_individual_losses:
+        if save_individual_losses:
             self.spectrum_alignment_terms.append(
                 spectrum_alignment_term.detach().numpy())
             self.MS_reg_terms.append(MS_reg_term.detach().numpy())
@@ -415,9 +422,10 @@ class SubgraphIsomorphismSolver:
             plt.show()
 
         if plots['ref spect vs spect']:
+            k = self.ref_spectrum.shape[0]
             plt.plot(self.ref_spectrum.numpy(), 'og')
-            plt.plot(self.spectrum, 'xr')
-            plt.title('ref spect vs spect')
+            plt.plot(self.spectrum[:k], 'xr')
+            plt.title('ref spect vs first k eigs of subgraph')
             plt.show()
 
         if plots['individual loss terms']:
