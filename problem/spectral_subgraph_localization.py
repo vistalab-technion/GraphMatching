@@ -190,11 +190,9 @@ class SubgraphIsomorphismSolver:
 
         groups = {'loss': ['loss']}
         plotlosses = PlotLosses(groups=groups, outputs=[MatplotlibPlot()])
-        converged_inner = False
-        pbar = tqdm(desc='optimizing v', total=maxiter_inner)
-        # for i in tqdm(range(maxiter)):
+        # converged_inner = False
         iter_count = 0
-        while not converged_inner:
+        for i in tqdm(range(maxiter_inner)):
             v_prev = self.v.detach()
             pgm.zero_grad()
             loss = \
@@ -207,13 +205,14 @@ class SubgraphIsomorphismSolver:
             if (iter_count + 1) % show_iter == 0:
                 self.plot_loss(plotlosses, loss_vals[-1])
             iter_count += 1
-            pbar.update(iter_count)
             converged_inner = self._check_convergence(v_prev=v_prev,
                                                       v=self.v.detach(),
                                                       r_tol=self.r_tol,
                                                       a_tol=self.a_tol)
             converged_inner = converged_inner or (iter_count >= maxiter_inner)
-        pbar.close()
+            if converged_inner:
+                # Yes it's bad practice, but otherwise the progress bar won't update
+                break
         print("done")
         L_edited = L + E.detach() + torch.diag(v.detach())
         spectrum = torch.linalg.eigvalsh(L_edited)
