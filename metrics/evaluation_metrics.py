@@ -51,16 +51,13 @@ class MetricEvaluator:
                                      target_names=E_target_names)
 
     def _arrange_data(self, v_np, v_gt):
-        v_ = v_np - np.min(v_np)
-        v_ = v_ / np.max(v_)
+        v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_np)
         v_clustered, centroids = kmeans1d.cluster(v_, k=2)
         E_clustered, S_clustered = \
             SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_clustered), self.A)
         s_clustered = S_clustered[np.triu_indices(len(v_np))]
 
-        v_ = v_gt.astype(int) - np.min(v_gt.astype(int))
-        v_ = v_ / np.max(v_)
-
+        v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_gt.astype(int))
         E_gt, S_gt = SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_gt), self.A)
         S_ = S_gt.numpy()
         s_ = S_[np.triu_indices(len(v_np))]

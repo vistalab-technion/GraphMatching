@@ -67,7 +67,7 @@ class SubgraphIsomorphismSolver:
 
         self.A = A
         self.D = torch.diag(A.sum(dim=1))
-        self.L = self.D - self.A
+        self.L = lap_from_adj(A)
         self.ref_spectrum = ref_spectrum
         self.spectrum_alignment_terms = []
         self.MS_reg_terms = []
@@ -306,7 +306,8 @@ class SubgraphIsomorphismSolver:
     def E_from_v(v, A):
         v_ = SubgraphIsomorphismSolver.indicator_from_v(v)
         S = -torch.abs(v_[:, None] - v_[:, None].T) * A
-        E = torch.diag(S.sum(axis=1)) - S
+        #E = torch.diag(S.sum(axis=1)) - S
+        E = lap_from_adj(S)
         return E, S
 
     @staticmethod
@@ -316,6 +317,15 @@ class SubgraphIsomorphismSolver:
             v_ = v_ / torch.max(v_)
         # v_ = torch.ones_like(v_,)-v_
         return v_
+
+    @staticmethod
+    def indicator_from_v_np(v_np):
+        v_ = v_np - np.min(v_np)
+        if np.max(v_) != 0:
+            v_ = v_ / np.max(v_)
+        # v_ = torch.ones_like(v_,)-v_
+        return v_
+
 
     def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
         plotlosses.update({
@@ -396,8 +406,7 @@ class SubgraphIsomorphismSolver:
         if plots['v_otsu']:
             ax = plt.subplot()
             # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = v - np.min(v)
-            v = v / np.max(v)
+            v= self.indicator_from_v_np(v)
             threshold = threshold_otsu(v, nbins=10)
             v_otsu = (v > threshold).astype(float)
             im = ax.imshow(np.diag(v_otsu))
@@ -410,8 +419,7 @@ class SubgraphIsomorphismSolver:
         if plots['v_kmeans']:
             ax = plt.subplot()
             # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = v - np.min(v)
-            v = v / np.max(v)
+            v = self.indicator_from_v_np(v)
             v_clustered, centroids = kmeans1d.cluster(v, k=2)
             im = ax.imshow(np.diag(v_clustered))
             divider = make_axes_locatable(ax)
@@ -554,6 +562,13 @@ class SubgraphIsomorphismSolver:
         return v_clustered, E_clustered
 
 
+def lap_from_adj(A):
+    return torch.diag(A.sum(axis=1)) - A
+    #D_sqrt_reciprocal = torch.diag(A.sum(axis=1) **-0.5)
+    #return D_sqrt_reciprocal@A@D_sqrt_reciprocal
+
+
+
 def edgelist_to_adjmatrix(edgeList_file):
     edge_list = np.loadtxt(edgeList_file, usecols=range(2))
 
@@ -589,7 +604,7 @@ if __name__ == '__main__':
     A = torch.tril(torch.bernoulli(p)).double()
     A = (A + A.T)
     D = torch.diag(A.sum(dim=1))
-    L = D - A
+    L = lap_from_adj(A)
 
     plt.imshow(A)
     plt.title('A')
