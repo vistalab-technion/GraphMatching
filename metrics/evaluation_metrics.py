@@ -8,9 +8,10 @@ from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
 
 
 class MetricEvaluator:
-    def __init__(self, A):
+    def __init__(self, A, subgraph_size = None):
         super().__init__()
         self.A = A
+        self.subgraph_size = subgraph_size
 
     def accuracy(self, v_np, v_gt):
         v_clustered, v_, s_clustered, s_ = \
@@ -51,8 +52,12 @@ class MetricEvaluator:
                                      target_names=E_target_names)
 
     def _arrange_data(self, v_np, v_gt):
-        v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_np)
-        v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+        v_clustered = np.zeros_like(v_np)
+        ind = np.argsort(v_np)
+        v_clustered[ind[self.subgraph_size:]] = 1
+        # v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_np)
+        # v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+
         E_clustered, S_clustered = \
             SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_clustered), self.A)
         s_clustered = S_clustered[np.triu_indices(len(v_np))]
