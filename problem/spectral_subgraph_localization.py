@@ -69,6 +69,7 @@ class SubgraphIsomorphismSolver:
         self.D = torch.diag(A.sum(dim=1))
         self.L = lap_from_adj(A)
         self.ref_spectrum = ref_spectrum
+        self.subgraph_size = ref_spectrum.shape[0]
         self.spectrum_alignment_terms = []
         self.MS_reg_terms = []
         self.trace_reg_terms = []
@@ -235,7 +236,8 @@ class SubgraphIsomorphismSolver:
     def _check_convergence(self, v, a_tol, v_prev=None, r_tol=None):
         # Todo: change conditions to follow kkt
         # Todo: change conditions to follow kkt
-        v_binary, E_binary = self.threshold(v_np=v.detach().numpy())
+        v_binary, E_binary = self.threshold(v_np=v.detach().numpy(),
+                                            subgraph_size=self.subgraph_size)
         eig_max = torch.max(self.ref_spectrum).numpy()
         c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
         loss = self.smooth_loss_function(self.ref_spectrum, self.L,
@@ -553,13 +555,21 @@ class SubgraphIsomorphismSolver:
 
         plt.show()
 
-    def threshold(self, v_np):
-        v_ = v_np - np.min(v_np)
-        v_ = v_ / np.max(v_)
-        v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+    def threshold(self, v_np, subgraph_size=None):
+        if subgraph_size is None:
+            v_ = v_np - np.min(v_np)
+            v_ = v_ / np.max(v_)
+            v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+        else:
+            # just take the smallest subgraph_size entries in v_np
+            v_clustered = np.zeros_like(v_np)
+            ind = np.argsort(v_np)
+            v_clustered[ind[subgraph_size:]] = 1
+
         v_clustered = torch.tensor(v_clustered, dtype=torch.float64)
         E_clustered, _ = self.E_from_v(v_clustered, self.A)
         return v_clustered, E_clustered
+
 
 
 def lap_from_adj(A):
