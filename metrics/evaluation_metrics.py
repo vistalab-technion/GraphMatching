@@ -52,11 +52,15 @@ class MetricEvaluator:
                                      target_names=E_target_names)
 
     def _arrange_data(self, v_np, v_gt):
+        # TODO: this part is alreadt implemented in SubgraphIsomorphismSolver.threshold.
+        #  should make it abstract method and replace the following code
+        # ------------------------------------------------------------
         v_clustered = np.zeros_like(v_np)
         ind = np.argsort(v_np)
         v_clustered[ind[self.subgraph_size:]] = 1
         # v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_np)
         # v_clustered, centroids = kmeans1d.cluster(v_, k=2)
+        # ------------------------------------------------------------
 
         E_clustered, S_clustered = \
             SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_clustered), self.A)
