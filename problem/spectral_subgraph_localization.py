@@ -134,6 +134,7 @@ class SubgraphIsomorphismSolver:
         self.mu_trace = problem_params['mu_trace']
         self.mu_split = problem_params['mu_split']
         self.trace_val = problem_params['trace_val']
+        self.weighted_flag = problem_params['weighted_flag']
 
     def set_solver_params(self, solver_params):
         self.v_prox = solver_params['v_prox']
@@ -260,7 +261,8 @@ class SubgraphIsomorphismSolver:
 
     def smooth_loss_function(self, ref_spectrum, L, E, v, save_individual_losses=False):
 
-        spectrum_alignment_term = self.spectrum_alignment_loss(ref_spectrum, L, E, v)
+        spectrum_alignment_term = self.spectrum_alignment_loss(ref_spectrum, L, E, v,
+                                                               self.weighted_flag)
         MS_reg_term = self.MSreg(L, E, v)
         trace_reg_term = self.trace_reg(E, self.trace_val)
         graph_split_term = self.graph_split_loss(L, E)
@@ -280,11 +282,15 @@ class SubgraphIsomorphismSolver:
 
         return smooth_loss_term
 
-    def spectrum_alignment_loss(self, ref_spectrum, L, E, v):
+    def spectrum_alignment_loss(self, ref_spectrum, L, E, v, weighted_flag=True):
         k = ref_spectrum.shape[0]
         Hamiltonian = L + E + torch.diag(v)
         spectrum = torch.linalg.eigvalsh(Hamiltonian)
-        loss = torch.norm(spectrum[0:k] - ref_spectrum) ** 2
+        if weighted_flag:
+            weights = torch.tensor([1 / w if w > 1e-8 else 1 for w in ref_spectrum])
+        else:
+            weights = torch.ones_like(ref_spectrum)
+        loss = torch.norm((spectrum[0:k] - ref_spectrum) * weights) ** 2
         return loss
 
     @staticmethod
@@ -308,7 +314,7 @@ class SubgraphIsomorphismSolver:
     def E_from_v(v, A):
         v_ = SubgraphIsomorphismSolver.indicator_from_v(v)
         S = -torch.abs(v_[:, None] - v_[:, None].T) * A
-        #E = torch.diag(S.sum(axis=1)) - S
+        # E = torch.diag(S.sum(axis=1)) - S
         E = lap_from_adj(S)
         return E, S
 
@@ -327,7 +333,6 @@ class SubgraphIsomorphismSolver:
             v_ = v_ / np.max(v_)
         # v_ = torch.ones_like(v_,)-v_
         return v_
-
 
     def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
         plotlosses.update({
@@ -408,7 +413,7 @@ class SubgraphIsomorphismSolver:
         if plots['v_otsu']:
             ax = plt.subplot()
             # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v= self.indicator_from_v_np(v)
+            v = self.indicator_from_v_np(v)
             threshold = threshold_otsu(v, nbins=10)
             v_otsu = (v > threshold).astype(float)
             im = ax.imshow(np.diag(v_otsu))
@@ -571,12 +576,10 @@ class SubgraphIsomorphismSolver:
         return v_clustered, E_clustered
 
 
-
 def lap_from_adj(A):
     return torch.diag(A.sum(axis=1)) - A
-    #D_sqrt_reciprocal = torch.diag(A.sum(axis=1) **-0.5)
-    #return D_sqrt_reciprocal@A@D_sqrt_reciprocal
-
+    # D_sqrt_reciprocal = torch.diag(A.sum(axis=1) **-0.5)
+    # return D_sqrt_reciprocal@A@D_sqrt_reciprocal
 
 
 def edgelist_to_adjmatrix(edgeList_file):
