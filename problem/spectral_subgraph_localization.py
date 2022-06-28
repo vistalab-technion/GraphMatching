@@ -17,6 +17,7 @@ from livelossplot import PlotLosses
 from livelossplot.outputs import MatplotlibPlot
 from time import sleep
 from scipy.linalg import qr, pinv
+from sklearn.cluster import SpectralClustering
 
 
 def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
@@ -144,6 +145,7 @@ class SubgraphIsomorphismSolver:
         self.train_E = solver_params['train_E']
         self.a_tol = solver_params['a_tol']
         self.r_tol = solver_params['r_tol']
+        self.threshold_algo = solver_params['threshold_algo']
 
     def solve(self,
               max_outer_iters=10,
@@ -236,14 +238,13 @@ class SubgraphIsomorphismSolver:
 
     def _check_convergence(self, v, a_tol, v_prev=None, r_tol=None):
         # Todo: change conditions to follow kkt
-        # Todo: change conditions to follow kkt
         v_binary, E_binary = self.threshold(v_np=v.detach().numpy(),
-                                            subgraph_size=self.subgraph_size)
+                                            threshold_algo=self.threshold_algo)
         eig_max = torch.max(self.ref_spectrum).numpy()
         c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
         loss = self.smooth_loss_function(self.ref_spectrum, self.L,
-                                         torch.tensor(E_binary),
-                                         torch.tensor(c * v_binary), False)
+                                         E_binary.detach(),
+                                         c * v_binary.detach(), False)
         condition1 = loss < a_tol
         if r_tol is not None:
             condition2 = (torch.norm(v - v_prev) / torch.norm(v)) < r_tol
@@ -287,7 +288,8 @@ class SubgraphIsomorphismSolver:
         Hamiltonian = L + E + torch.diag(v)
         spectrum = torch.linalg.eigvalsh(Hamiltonian)
         if weighted_flag:
-            weights = torch.tensor([1 / w if w > 1e-8 else 1 for w in ref_spectrum])
+            weights = torch.tensor([1 / w if w > 1e-8 else 1 for w in
+                                    ref_spectrum])
         else:
             weights = torch.ones_like(ref_spectrum)
         loss = torch.norm((spectrum[0:k] - ref_spectrum) * weights) ** 2
@@ -560,16 +562,27 @@ class SubgraphIsomorphismSolver:
 
         plt.show()
 
-    def threshold(self, v_np, subgraph_size=None):
-        if subgraph_size is None:
+    def threshold(self, v_np, threshold_algo='1dkmeans'):
+        if threshold_algo == '1dkmeans':
             v_ = v_np - np.min(v_np)
             v_ = v_ / np.max(v_)
             v_clustered, centroids = kmeans1d.cluster(v_, k=2)
-        else:
+
+        elif threshold_algo == 'smallest':
             # just take the smallest subgraph_size entries in v_np
+            subgraph_size = self.ref_spectrum.shape[0]
             v_clustered = np.zeros_like(v_np)
             ind = np.argsort(v_np)
             v_clustered[ind[subgraph_size:]] = 1
+
+        elif threshold_algo == 'spectral':
+            affinity_matrix = (self.L + self.E.detach())
+            affinity_matrix = lap_from_adj(affinity_matrix)
+            clustering = \
+                SpectralClustering(n_clusters=2, assign_labels='discretize',
+                                   random_state=0, affinity='precomputed').fit(
+                    affinity_matrix)
+            v_clustered = np.ones_like(v_np) - clustering.labels_
 
         v_clustered = torch.tensor(v_clustered, dtype=torch.float64)
         E_clustered, _ = self.E_from_v(v_clustered, self.A)
