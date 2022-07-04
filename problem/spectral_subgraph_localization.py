@@ -486,13 +486,16 @@ class SubgraphIsomorphismSolver:
             plt.show()
 
     @staticmethod
-    def plot_on_graph(A, n_subgraph, v, E):
+    def plot_on_graph(A, v, E, subset_nodes, pos=None):
         """
         plots the potentials E and v on the full graph
 
         :param A: adjacency of full graph
         :param n_subgraph: size of subgraph
         """
+        if pos is None:
+            pos = nx.spring_layout(nx.from_numpy_matrix(A))
+
         fig, axes = plt.subplots(nrows=1, ncols=2, figsize=[10, 10])
         ax = axes.flat
 
@@ -500,7 +503,7 @@ class SubgraphIsomorphismSolver:
         vmax = np.max(v)
 
         G = nx.from_numpy_matrix(A)
-        pos = nx.spring_layout(G)
+        # pos = nx.spring_layout(G)
         # pos = nx.spring_layout(G)
         # plt.rcParams["figure.figsize"] = (20,20)
 
@@ -530,7 +533,7 @@ class SubgraphIsomorphismSolver:
 
         vmin = np.min(weights)
         vmax = np.max(weights)
-        subset_nodes = range(n_subgraph)
+        # subset_nodes = range(n_subgraph)
         # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
 
         color_map = []

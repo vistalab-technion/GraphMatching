@@ -8,12 +8,15 @@ from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
 
 
 class MetricEvaluator:
-    def __init__(self, A, subgraph_size = None):
+    def __init__(self, A, subgraph_size=None):
         super().__init__()
         self.A = A
         self.subgraph_size = subgraph_size
 
     def accuracy(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
+
         v_clustered, v_, s_clustered, s_ = \
             self._arrange_data(v_np=v_np, v_gt=v_gt)
 
@@ -21,6 +24,9 @@ class MetricEvaluator:
                accuracy_score(y_true=s_, y_pred=s_clustered)
 
     def balanced_accuracy(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
+
         v_clustered, v_, e_clustered, e_ = \
             self._arrange_data(v_np=v_np, v_gt=v_gt)
 
@@ -28,6 +34,9 @@ class MetricEvaluator:
                balanced_accuracy_score(y_true=e_, y_pred=e_clustered)
 
     def confusion_matrix(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
+
         v_clustered, v_, s_clustered, s_ = \
             self._arrange_data(v_np=v_np, v_gt=v_gt)
 
@@ -35,6 +44,9 @@ class MetricEvaluator:
                confusion_matrix(y_true=s_, y_pred=s_clustered, normalize='all')
 
     def jaccard_score(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
+
         v_clustered, v_, s_clustered, s_ = \
             self._arrange_data(v_np=v_np, v_gt=v_gt)
 
@@ -42,6 +54,9 @@ class MetricEvaluator:
                jaccard_score(y_true=s_, y_pred=s_clustered, pos_label=-1)
 
     def classification_report(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
+
         v_clustered, v_, s_clustered, s_ = \
             self._arrange_data(v_np=v_np, v_gt=v_gt)
         v_target_names = ['v_in', 'v_out']
@@ -52,6 +67,7 @@ class MetricEvaluator:
                                      target_names=E_target_names)
 
     def _arrange_data(self, v_np, v_gt):
+
         # TODO: this part is alreadt implemented in SubgraphIsomorphismSolver.threshold.
         #  should make it abstract method and replace the following code
         # ------------------------------------------------------------
@@ -75,12 +91,18 @@ class MetricEvaluator:
                s_clustered, s_
 
     def evaluate(self, v_np, v_gt):
+        self._validate_input(v_np)
+        self._validate_input(v_gt)
         metrics = {"accuracy": self.accuracy(v_np, v_gt),
                    "balanced_accuracy": self.balanced_accuracy(v_np, v_gt),
                    "confusion_matrix": self.confusion_matrix(v_np, v_gt),
                    "classification_report": self.classification_report(v_np, v_gt),
                    "jaccard_score": self.jaccard_score(v_np, v_gt)}
         return metrics
+
+    def _validate_input(self, v_np):
+        if not (np.all(np.logical_or(v_np == 0, v_np == 1))):
+            raise ValueError('v should contain only 0 and 1')
 
     @staticmethod
     def print(metrics, keys=None):
