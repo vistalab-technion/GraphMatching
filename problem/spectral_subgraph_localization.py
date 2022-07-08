@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from numpy import histogram
+from torch import tensor
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from optimization.algs.prox_grad import PGM
@@ -579,8 +580,9 @@ class SubgraphIsomorphismSolver:
             v_clustered[ind[subgraph_size:]] = 1
 
         elif threshold_algo == 'spectral':
-            affinity_matrix = (self.L + self.E.detach())
-            affinity_matrix = lap_from_adj(affinity_matrix)
+            E , S = self.E_from_v(tensor(v_np), self.A)
+            affinity_matrix = (self.A + S.detach())
+            #affinity_matrix = lap_from_adj(affinity_matrix)
             clustering = \
                 SpectralClustering(n_clusters=2, assign_labels='discretize',
                                    random_state=0, affinity='precomputed').fit(
