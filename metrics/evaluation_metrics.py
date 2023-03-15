@@ -4,6 +4,8 @@ from sklearn.metrics import \
     jaccard_score
 import numpy as np
 import kmeans1d
+
+from problem.base import E_from_v, indicator_from_v_np
 from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
 
 
@@ -79,11 +81,11 @@ class MetricEvaluator:
         # ------------------------------------------------------------
 
         E_clustered, S_clustered = \
-            SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_clustered), self.A)
+            E_from_v(torch.tensor(v_clustered), self.A)
         s_clustered = S_clustered[np.triu_indices(len(v_np))]
 
-        v_ = SubgraphIsomorphismSolver.indicator_from_v_np(v_gt.astype(int))
-        E_gt, S_gt = SubgraphIsomorphismSolver.E_from_v(torch.tensor(v_gt), self.A)
+        v_ = indicator_from_v_np(v_gt.astype(int))
+        E_gt, S_gt = E_from_v(torch.tensor(v_gt), self.A)
         S_ = S_gt.numpy()
         s_ = S_[np.triu_indices(len(v_np))]
         return np.ones_like(v_clustered) - v_clustered, \

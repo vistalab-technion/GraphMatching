@@ -8,6 +8,8 @@ from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
     ProxL21ForSymmCentdMatrixAndInequality, ProxSymmetricCenteredMatrix, ProxId, \
     ProxNonNeg
+from problem.base import BaseSubgraphIsomorphismSolver, lap_from_adj, \
+    block_stochastic_graph, E_from_v
 from tests.optimization.util import double_centering, set_diag_zero
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.cluster.vq import kmeans2
@@ -21,24 +23,7 @@ from scipy.linalg import qr, pinv
 from sklearn.cluster import SpectralClustering
 
 
-def block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.1):
-    n = n1 + n2
-    p11 = set_diag_zero(p_parts * torch.ones(n1, n1))
-
-    p22 = set_diag_zero(p_parts * torch.ones(n2, n2))
-
-    p12 = p_off * torch.ones(n1, n2)
-
-    p = torch.zeros([n, n])
-    p[0:n1, 0:n1] = p11
-    p[0:n1, n1:n] = p12
-    p[n1:n, n1:n] = p22
-    p[n1:n, 0:n1] = p12.T
-
-    return p
-
-
-class SubgraphIsomorphismSolver:
+class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
 
     def __init__(self, A, ref_spectrum, problem_params, solver_params,
                  save_loss_terms=True):
@@ -46,9 +31,9 @@ class SubgraphIsomorphismSolver:
         """
         Proximal algorithm solver for subgraph spectral matching.
 
-        :param L: Laplacian of full graph
+        :param A: Adjacency matrix of graph
         :param ref_spectrum: spectrum of reference graph (i.e., the subgraph)
-        :param params: parameters for the algorithm and solver. For example:
+        :param problem_params: parameters for the algorithm and solver. For example:
             params =
             {'maxiter': 100,
               'show_iter': 10,
@@ -64,14 +49,15 @@ class SubgraphIsomorphismSolver:
                                                                 1.1*torch.trace(L)),
               'trace_val': 0
               }
+        :solver_params: parameters for solver
         :param save_loss_terms: flag for saving the individual loss terms
         """
 
-        self.A = A
-        self.D = torch.diag(A.sum(dim=1))
-        self.L = lap_from_adj(A)
-        self.ref_spectrum = ref_spectrum
-        self.subgraph_size = ref_spectrum.shape[0]
+        super().__init__(A=A,
+                         ref_spectrum=ref_spectrum,
+                         problem_params=problem_params,
+                         solver_params=solver_params)
+
         self.spectrum_alignment_terms = []
         self.MS_reg_terms = []
         self.trace_reg_terms = []
@@ -79,11 +65,6 @@ class SubgraphIsomorphismSolver:
         self.l21_terms = []
         self.loss_vals = []
         self.save_individual_losses = save_loss_terms
-        self.solver_params = solver_params
-        self.problem_params = problem_params
-        self.set_problem_params(problem_params)
-        self.set_solver_params(solver_params)
-
         # init
         self.set_init()
 
@@ -129,25 +110,6 @@ class SubgraphIsomorphismSolver:
                   lr=self.lr)
         return pgm, lamb
 
-    def set_problem_params(self, problem_params):
-        self.mu_spectral = problem_params['mu_spectral']
-        self.mu_l21 = problem_params['mu_l21']
-        self.mu_MS = problem_params['mu_MS']
-        self.mu_trace = problem_params['mu_trace']
-        self.mu_split = problem_params['mu_split']
-        self.trace_val = problem_params['trace_val']
-        self.weighted_flag = problem_params['weighted_flag']
-
-    def set_solver_params(self, solver_params):
-        self.v_prox = solver_params['v_prox']
-        self.E_prox = solver_params['E_prox']
-        self.lr = solver_params['lr']
-        self.train_v = solver_params['train_v']
-        self.train_E = solver_params['train_E']
-        self.a_tol = solver_params['a_tol']
-        self.r_tol = solver_params['r_tol']
-        self.threshold_algo = solver_params['threshold_algo']
-
     def solve(self,
               max_outer_iters=10,
               max_inner_iters=10,
@@ -159,7 +121,7 @@ class SubgraphIsomorphismSolver:
             v, _ = self._solve(maxiter_inner=max_inner_iters,
                                show_iter=show_iter,
                                verbose=verbose)
-            E, _ = self.E_from_v(self.v.detach(), self.A)
+            E, _ = E_from_v(self.v.detach(), self.A)
             self.set_init(E0=E, v0=v)
             self.v = v
             self.E = E
@@ -312,30 +274,6 @@ class SubgraphIsomorphismSolver:
     @staticmethod
     def trace_reg(E, trace_val=0):
         return (torch.trace(E) - trace_val) ** 2
-
-    @staticmethod
-    def E_from_v(v, A):
-        v_ = SubgraphIsomorphismSolver.indicator_from_v(v)
-        S = -torch.abs(v_[:, None] - v_[:, None].T) * A
-        # E = torch.diag(S.sum(axis=1)) - S
-        E = lap_from_adj(S)
-        return E, S
-
-    @staticmethod
-    def indicator_from_v(v):
-        v_ = v - torch.min(v)
-        if torch.max(v_) != 0:
-            v_ = v_ / torch.max(v_)
-        # v_ = torch.ones_like(v_,)-v_
-        return v_
-
-    @staticmethod
-    def indicator_from_v_np(v_np):
-        v_ = v_np - np.min(v_np)
-        if np.max(v_) != 0:
-            v_ = v_ / np.max(v_)
-        # v_ = torch.ones_like(v_,)-v_
-        return v_
 
     def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
         plotlosses.update({
@@ -565,117 +503,3 @@ class SubgraphIsomorphismSolver:
         #                     hspace=None)
 
         plt.show()
-
-    def threshold(self, v_np, threshold_algo='1dkmeans'):
-        if threshold_algo == '1dkmeans':
-            v_ = v_np - np.min(v_np)
-            v_ = v_ / np.max(v_)
-            v_clustered, centroids = kmeans1d.cluster(v_, k=2)
-
-        elif threshold_algo == 'smallest':
-            # just take the smallest subgraph_size entries in v_np
-            subgraph_size = self.ref_spectrum.shape[0]
-            v_clustered = np.zeros_like(v_np)
-            ind = np.argsort(v_np)
-            v_clustered[ind[subgraph_size:]] = 1
-
-        elif threshold_algo == 'spectral':
-            E , S = self.E_from_v(tensor(v_np), self.A)
-            affinity_matrix = (self.A + S.detach())
-            #affinity_matrix = lap_from_adj(affinity_matrix)
-            clustering = \
-                SpectralClustering(n_clusters=2, assign_labels='discretize',
-                                   random_state=0, affinity='precomputed').fit(
-                    affinity_matrix)
-            v_clustered = np.ones_like(v_np) - clustering.labels_
-
-        v_clustered = torch.tensor(v_clustered, dtype=torch.float64)
-        E_clustered, _ = self.E_from_v(v_clustered, self.A)
-        return v_clustered, E_clustered
-
-
-def lap_from_adj(A):
-    return torch.diag(A.sum(axis=1)) - A
-    # D_sqrt_reciprocal = torch.diag(A.sum(axis=1) **-0.5)
-    # return D_sqrt_reciprocal@A@D_sqrt_reciprocal
-
-
-def edgelist_to_adjmatrix(edgeList_file):
-    edge_list = np.loadtxt(edgeList_file, usecols=range(2))
-
-    n = int(np.amax(edge_list) + 1)
-    # n = int(np.amax(edge_list))
-    # print(n)
-
-    e = np.shape(edge_list)[0]
-
-    a = np.zeros((n, n))
-
-    # make adjacency matrix A1
-
-    for i in range(0, e):
-        n1 = int(edge_list[i, 0])  # - 1
-
-        n2 = int(edge_list[i, 1])  # - 1
-
-        a[n1, n2] = 1.0
-        a[n2, n1] = 1.0
-
-    return a
-
-
-if __name__ == '__main__':
-    torch.manual_seed(12)
-
-    n1 = 5
-    n2 = 15
-    n = n1 + n2
-    p = block_stochastic_graph(n1, n2, p_parts=0.7, p_off=0.2)
-
-    A = torch.tril(torch.bernoulli(p)).double()
-    A = (A + A.T)
-    D = torch.diag(A.sum(dim=1))
-    L = lap_from_adj(A)
-
-    plt.imshow(A)
-    plt.title('A')
-    plt.show()
-
-    A_sub = A[0:n1, 0:n1]
-    D_sub = torch.diag(A_sub.sum(dim=1))
-    L_sub = D_sub - A_sub
-    ref_spectrum = torch.linalg.eigvalsh(L_sub)
-    params = {'maxiter': 100,
-              'show_iter': 10,
-              'mu_spectral': 1,
-              'mu_l21': 1,
-              'mu_MS': 1,
-              'mu_split': 1,
-              'mu_trace': 0.0,
-              'lr': 0.02,
-              'v_prox': ProxNonNeg(),
-              # 'E_prox': ProxL21ForSymmetricCenteredMatrix(solver="cvx"),
-              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
-                                                               trace_upper_bound=
-                                                               1.1 * torch.trace(L)),
-              'trace_val': 0
-              }
-    plots = {
-        'full_loss': True,
-        'E': True,
-        'v': True,
-        'diag(v)': True,
-        'v_otsu': False,
-        'v_kmeans': True,
-        'A edited': True,
-        'L+E': False,
-        'ref spect vs spect': True,
-        'individual loss terms': True}
-    subgraph_isomorphism_solver = \
-        SubgraphIsomorphismSolver(L, ref_spectrum, params)
-    v, E = subgraph_isomorphism_solver.solve()
-    subgraph_isomorphism_solver.plot(plots)
-    subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int),
-                                              n1,
-                                              subgraph_isomorphism_solver.v,
-                                              subgraph_isomorphism_solver.E)
