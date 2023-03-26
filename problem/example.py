@@ -2,7 +2,7 @@ import torch
 
 from optimization.prox.prox import ProxNonNeg, ProxL21ForSymmCentdMatrixAndInequality
 from problem.base import block_stochastic_graph, lap_from_adj
-from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
+from problem.spectral_subgraph_localization import ProximalSubgraphIsomorphismSolver
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         'ref spect vs spect': True,
         'individual loss terms': True}
     subgraph_isomorphism_solver = \
-        SubgraphIsomorphismSolver(L, ref_spectrum, params)
+        ProximalSubgraphIsomorphismSolver(L, ref_spectrum, params)
     v, E = subgraph_isomorphism_solver.solve()
     subgraph_isomorphism_solver.plot(plots)
     subgraph_isomorphism_solver.plot_on_graph(A.numpy().astype(int),

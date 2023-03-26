@@ -4,6 +4,8 @@ from numpy import histogram
 from torch import tensor
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+
+from optimization.algs.power_method import QRPowerMethod
 from optimization.algs.prox_grad import PGM
 from optimization.prox.prox import ProxL21ForSymmetricCenteredMatrix, l21, \
     ProxL21ForSymmCentdMatrixAndInequality, ProxSymmetricCenteredMatrix, ProxId, \
@@ -23,7 +25,7 @@ from scipy.linalg import qr, pinv
 from sklearn.cluster import SpectralClustering
 
 
-class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
+class ProximalSubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
 
     def __init__(self, A, ref_spectrum, problem_params, solver_params,
                  save_loss_terms=True):
@@ -67,28 +69,6 @@ class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
         self.save_individual_losses = save_loss_terms
         # init
         self.set_init()
-
-    def set_init(self, v0=None, E0=None):
-        n = self.L.shape[0]
-        if v0 is None:
-            eig_max = torch.max(self.ref_spectrum)
-            c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
-            v0 = (c / np.sqrt(n)) * np.ones(n)
-            self.v = torch.tensor(v0, requires_grad=self.train_v, dtype=torch.float64)
-        else:
-            self.v = v0
-
-        if E0 is None:
-            # init
-            E = torch.zeros([n, n], dtype=torch.float64)
-            self.E = \
-                double_centering(0.5 * (E + E.T)).requires_grad_(
-                    requires_grad=self.train_E)
-        else:
-            self.E = E0
-
-        self.E.requires_grad = self.train_E
-        self.v.requires_grad = self.train_v
 
     def set_optim(self, v, E):
         lamb = self.mu_l21 * self.lr  # This setting is important!
@@ -215,73 +195,6 @@ class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
             condition2 = False
         return condition1 or condition2
 
-    def non_smooth_loss_function(self, E):
-        l21_loss = l21(E)
-
-        if self.save_individual_losses:
-            self.l21_terms.append(l21_loss)
-
-        return self.mu_l21 * l21(E)
-
-    def smooth_loss_function(self, ref_spectrum, L, E, v, save_individual_losses=False):
-
-        spectrum_alignment_term = self.spectrum_alignment_loss(ref_spectrum, L, E, v,
-                                                               self.weighted_flag)
-        MS_reg_term = self.MSreg(L, E, v)
-        trace_reg_term = self.trace_reg(E, self.trace_val)
-        graph_split_term = self.graph_split_loss(L, E)
-
-        smooth_loss_term = \
-            self.mu_spectral * spectrum_alignment_term \
-            + self.mu_MS * MS_reg_term \
-            + self.mu_trace * trace_reg_term \
-            + self.mu_split * graph_split_term
-
-        if save_individual_losses:
-            self.spectrum_alignment_terms.append(
-                spectrum_alignment_term.detach().numpy())
-            self.MS_reg_terms.append(MS_reg_term.detach().numpy())
-            self.trace_reg_terms.append(trace_reg_term.detach().numpy())
-            self.graph_split_terms.append(graph_split_term.detach().numpy())
-
-        return smooth_loss_term
-
-    def spectrum_alignment_loss(self, ref_spectrum, L, E, v, weighted_flag=True):
-        k = ref_spectrum.shape[0]
-        Hamiltonian = L + E + torch.diag(v)
-        spectrum = torch.linalg.eigvalsh(Hamiltonian)
-        if weighted_flag:
-            weights = torch.tensor([1 / w if w > 1e-8 else 1 for w in
-                                    ref_spectrum])
-        else:
-            weights = torch.ones_like(ref_spectrum)
-        loss = torch.norm((spectrum[0:k] - ref_spectrum) * weights) ** 2
-        return loss
-
-    @staticmethod
-    def graph_split_loss(L, E):
-        L_edited = L + E
-        spectrum = torch.linalg.eigvalsh(L_edited)
-        # loss = torch.norm(spectrum[0:2]) ** 2
-        loss = spectrum[1]
-        # print(loss)
-        return loss
-
-    @staticmethod
-    def MSreg(L, E, v):
-        return v.T @ (L + E) @ v
-
-    @staticmethod
-    def trace_reg(E, trace_val=0):
-        return (torch.trace(E) - trace_val) ** 2
-
-    def plot_loss(self, plotlosses, loss_val, sleep_time=.00001):
-        plotlosses.update({
-            'loss': loss_val,
-        })
-        plotlosses.send()
-        sleep(sleep_time)
-
     def plot(self, plots):
         """
         produces various plots
@@ -299,89 +212,7 @@ class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
                         'ref spect vs spect': True,
                         'individual loss terms': True}
         """
-        E = self.E.detach().numpy()
-        v = self.v.detach().numpy()
-
-        if plots['full_loss']:
-            plt.plot(self.loss_vals, 'b')
-            plt.title('full loss')
-            plt.xlabel('iter')
-            plt.show()
-
-        if plots['E']:
-            ax = plt.subplot()
-            im = ax.imshow(E - np.diag(np.diag(E)))
-            divider = make_axes_locatable(ax)
-            ax.set_title('E -diag(E)')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['L+E']:
-            ax = plt.subplot()
-            L_edited = E + self.L.numpy()
-            im = ax.imshow(L_edited)
-            divider = make_axes_locatable(ax)
-            ax.set_title('L+E')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['A edited']:
-            ax = plt.subplot()
-            A_edited = -set_diag_zero(E + self.L.numpy())
-            im = ax.imshow(A_edited)
-            divider = make_axes_locatable(ax)
-            ax.set_title('A edited')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['v']:
-            plt.plot(np.sort(v), 'xr')
-            plt.title('v')
-            plt.show()
-
-        if plots['diag(v)']:
-            ax = plt.subplot()
-            im = ax.imshow(np.diag(v))
-            divider = make_axes_locatable(ax)
-            ax.set_title('diag(v)')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['v_otsu']:
-            ax = plt.subplot()
-            # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = self.indicator_from_v_np(v)
-            threshold = threshold_otsu(v, nbins=10)
-            v_otsu = (v > threshold).astype(float)
-            im = ax.imshow(np.diag(v_otsu))
-            divider = make_axes_locatable(ax)
-            ax.set_title('diag(v_otsu)')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['v_kmeans']:
-            ax = plt.subplot()
-            # _, v_clustered = kmeans2(self.v, 2, minit='points')
-            v = self.indicator_from_v_np(v)
-            v_clustered, centroids = kmeans1d.cluster(v, k=2)
-            im = ax.imshow(np.diag(v_clustered))
-            divider = make_axes_locatable(ax)
-            ax.set_title('diag(v_kmeans)')
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-            plt.show()
-
-        if plots['ref spect vs spect']:
-            k = self.ref_spectrum.shape[0]
-            plt.plot(self.ref_spectrum.numpy(), 'og')
-            plt.plot(self.spectrum[:k], 'xr')
-            plt.title('ref spect vs first k eigs of subgraph')
-            plt.show()
+        self._plot(plots)
 
         if plots['individual loss terms']:
             font_color = "r"
@@ -424,82 +255,178 @@ class SubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
                                 hspace=2)
             plt.show()
 
-    @staticmethod
-    def plot_on_graph(A, v, E, subset_nodes, pos=None):
+
+class QRPMSubgraphIsomorphismSolver(BaseSubgraphIsomorphismSolver):
+
+    def __init__(self, A, ref_spectrum, problem_params, solver_params,
+                 save_loss_terms=True):
+
         """
-        plots the potentials E and v on the full graph
+        QR Power Method algorithm for subgraph spectral matching.
 
-        :param A: adjacency of full graph
-        :param n_subgraph: size of subgraph
+        :param A: Adjacency matrix of graph
+        :param ref_spectrum: spectrum of reference graph (i.e., the subgraph)
+        :param problem_params: parameters for the algorithm and solver. For example:
+            params =
+            {'maxiter': 100,
+              'show_iter': 10,
+              'mu_spectral': 1,
+              'mu_l21': 1,
+              'mu_MS': 1,
+              'mu_split': 1,
+              'mu_trace': 0.0,
+              'lr': 0.02,
+              'v_prox': ProxNonNeg(),
+              'E_prox': ProxL21ForSymmCentdMatrixAndInequality(solver="cvx", L=L,
+                                                                trace_upper_bound=
+                                                                1.1*torch.trace(L)),
+              'trace_val': 0
+              }
+        :solver_params: parameters for solver
+        :param save_loss_terms: flag for saving the individual loss terms
         """
-        if pos is None:
-            pos = nx.spring_layout(nx.from_numpy_matrix(A))
 
-        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=[10, 10])
-        ax = axes.flat
+        super().__init__(A=A,
+                         ref_spectrum=ref_spectrum,
+                         problem_params=problem_params,
+                         solver_params=solver_params)
 
-        vmin = np.min(v)
-        vmax = np.max(v)
+        self.loss_vals = []
+        self.save_individual_losses = save_loss_terms
+        # init
+        self.set_init()
 
-        G = nx.from_numpy_matrix(A)
-        # pos = nx.spring_layout(G)
-        # pos = nx.spring_layout(G)
-        # plt.rcParams["figure.figsize"] = (20,20)
+    def set_init(self, v0=None, E0=None):
+        n = self.L.shape[0]
+        if v0 is None:
+            eig_max = torch.max(self.ref_spectrum)
+            c = np.sqrt(self.A.shape[0] - self.ref_spectrum.shape[0]) * eig_max
+            v0 = (c / np.sqrt(n)) * np.ones(n)
+            self.V = torch.eye(n)
+            self.V[:,0] = torch.tensor(v0, requires_grad=self.train_v, dtype=torch.float64)
+        else:
+            self.V = torch.eye(n)
+            self.V[:,0] = v0
 
-        # for edge in G.edges():
+        if E0 is None:
+            # init
+            E = torch.zeros([n, n], dtype=torch.float64)
+            self.E = \
+                double_centering(0.5 * (E + E.T)).requires_grad_(
+                    requires_grad=self.train_E)
+        else:
+            self.E = E0
 
-        for u, w, d in G.edges(data=True):
-            d['weight'] = E[u, w]
+        self.E.requires_grad = self.train_E
+        self.v.requires_grad = self.train_v
 
-        edges, weights = zip(*nx.get_edge_attributes(G, 'weight').items())
+    def set_optim(self, v, E):
+        lamb = self.mu_l21 * self.lr  # This setting is important!
 
-        cmap = plt.cm.gnuplot
-        # ax = plt.subplot()
-        nx.draw(G, node_color=v, edgelist=edges, vmin=vmin, vmax=vmax, cmap=cmap,
-                node_size=30,
-                pos=pos, ax=ax[0])
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-        sm._A = []
-        ax[0].set_title('Nodes colored by potential v')
-        # create an axes on the right side of ax. The width of cax will be 5%
-        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
-        divider = make_axes_locatable(ax[0])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(sm, ax=ax[0], cax=cax)
-        ax[0].set_aspect('equal', 'box')
+        if self.train_E and self.train_v:
+            optim_params = [{'params': v}, {'params': E}]
+            proxs = [self.v_prox, self.E_prox]
+        elif not self.train_E and self.train_v:
+            optim_params = [{'params': v}]
+            proxs = [self.v_prox]
+        elif self.train_E and not self.train_v:
+            optim_params = [{'params': E}]
+            proxs = [self.E_prox]
 
-        #  plt.savefig(file+'.png')
+        v.requires_grad = self.train_v
+        E.requires_grad = self.train_E
+        pgm = PGM(params=optim_params,
+                  proxs=proxs,
+                  lr=self.lr)
+        return pgm, lamb
 
-        vmin = np.min(weights)
-        vmax = np.max(weights)
-        # subset_nodes = range(n_subgraph)
-        # subset_nodes = np.loadtxt(data_path + graph_name + '_nodes.txt').astype(int)
+    def _solve(self, maxiter_inner=100, show_iter=10, verbose=False):
+        L = self.L
 
-        color_map = []
-        for node in G:
-            if node in subset_nodes:
-                color_map.append('red')
-            else:
-                color_map.append('green')
-        cmap = plt.cm.gnuplot
-        # ax = plt.subplot()
-        nx.draw(G, node_color=color_map, edgelist=edges, edge_color=weights, width=2.0,
-                edge_cmap=cmap, vmin=vmin,
-                vmax=vmax, cmap=cmap, node_size=30, pos=pos, ax=ax[1])
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
-        sm._A = []
-        ax[1].set_title('Edges colored by E')
-        #  plt.savefig(file+'.png')
+        # Q, R = qr(L.numpy())
+        # self.P = torch.eye(L.shape[0]) - torch.tensor(Q @ Q.T)
 
-        # create an axes on the right side of ax. The width of cax will be 5%
-        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
-        divider = make_axes_locatable(ax[1])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(sm, ax=ax[1], cax=cax)
-        ax[1].set_aspect('equal', 'box')
+        ref_spectrum = self.ref_spectrum
+        n = L.shape[0]
 
-        # plt.subplots_adjust(left=None, bottom=None, right=None, top=None,
-        #                     wspace=2,
-        #                     hspace=None)
+        # init
+        v = self.v
+        E = self.E
 
-        plt.show()
+        full_loss_function = lambda ref, L, E, v: \
+            self.smooth_loss_function(ref, L, E, v, False) \
+            + self.non_smooth_loss_function(E)
+
+        loss_vals = []
+
+
+        groups = {'loss': ['loss']}
+        plotlosses = PlotLosses(groups=groups, outputs=[MatplotlibPlot()])
+        # converged_inner = False
+        iter_count = 0
+        L_shifted = L - torch.diag(self.ref_spectrum, diagonal=0)
+
+        shift_matrix  = self.shift_operator(self.V)
+        L, U = torch.lu(L_shifted + shift_matrix)
+        for i in tqdm(range(maxiter_inner)):
+            v_prev = self.v.detach()
+            Y = torch.linalg.solve(L, V)
+            Z = torch.linalg.solve(U, Y)
+            V, _ = torch.linalg.qr(Z)
+            loss = \
+                self.smooth_loss_function(ref_spectrum, L, E, v,
+                                          self.save_individual_losses)
+            loss_vals.append(
+                full_loss_function(ref_spectrum, L, E.detach(), v.detach()))
+            if (iter_count + 1) % show_iter == 0:
+                self.plot_loss(plotlosses, loss_vals[-1])
+            iter_count += 1
+            converged_inner = self._check_convergence(v_prev=v_prev,
+                                                      v=self.v.detach(),
+                                                      r_tol=self.r_tol,
+                                                      a_tol=self.a_tol)
+            converged_inner = converged_inner or (iter_count >= maxiter_inner)
+            if converged_inner:
+                # Yes it's bad practice, but otherwise the progress bar won't update
+                break
+        print("done")
+        L_edited = L + E.detach() + torch.diag(v.detach())
+        spectrum = torch.linalg.eigvalsh(L_edited)
+        k = ref_spectrum.shape[0]
+
+        self.loss_vals = [*self.loss_vals, *loss_vals]
+        self.E = E
+        self.v = v
+        self.spectrum = spectrum.detach().numpy()
+        # self.plots()
+
+        if verbose:
+            print(f"v= {v}")
+            print(f"E= {E}")
+            print(f"lambda= {spectrum[0:k]}")
+            print(f"lambda*= {ref_spectrum}")
+            print(f"||lambda-lambda*|| = {torch.norm(spectrum[0:k] - ref_spectrum)}")
+        return v, E
+
+    @property
+    def v(self):
+        return self.V[:,0]
+
+    def plot(self, plots):
+        """
+        produces various plots
+
+        :param plots: flags for which plots to produce.
+        The following plots are supported:
+                plots = {'full_loss': True,
+                        'E': True,
+                        'v': True,
+                        'diag(v)': True,
+                        'v_otsu': True,
+                        'v_kmeans': True,
+                        'A edited': True,
+                        'L+E': True,
+                        'ref spect vs spect': True,
+                        'individual loss terms': True}
+        """
+        self._plot(plots)

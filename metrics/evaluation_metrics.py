@@ -6,7 +6,7 @@ import numpy as np
 import kmeans1d
 
 from problem.base import E_from_v, indicator_from_v_np
-from problem.spectral_subgraph_localization import SubgraphIsomorphismSolver
+from problem.spectral_subgraph_localization import ProximalSubgraphIsomorphismSolver
 
 
 class MetricEvaluator:

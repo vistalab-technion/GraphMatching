@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from problem.spectral_subgraph_localization import lap_from_adj, \
-    SubgraphIsomorphismSolver
+    ProximalSubgraphIsomorphismSolver
 
 
 def load_data(target, pattern):
