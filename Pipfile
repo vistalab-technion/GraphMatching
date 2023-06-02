@@ -21,6 +21,7 @@ scikit-image = "*"
 kmeans1d = "*"
 livelossplot = "*"
 scikit-learn = "*"
+torch_geometric = "*"
 
 [dev-packages]
 pytest = "*"
