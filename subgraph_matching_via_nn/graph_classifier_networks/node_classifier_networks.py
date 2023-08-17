@@ -8,15 +8,17 @@ from torch_geometric.utils import from_scipy_sparse_matrix
 from subgraph_matching_via_nn.utils.utils import DTYPE
 
 
-class BaseMaskGeneratorNetwork(nn.Module):
-    def __init__(self):
+class BaseNodeClassifierNetwork(nn.Module):
+    def __init__(self, subgraph : None, graph_generator : None):
         super().__init__()
 
-    def init_params(self):
+    def init_params(self, subgraph):
+        # create examples with the graph generator
+        # train node classifier
         pass
 
 
-class NNMaskGeneratorNetwork(BaseMaskGeneratorNetwork):
+class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, output_dim, learnable_sigmoid=True,
                  default_sigmoid_param_value=10):
         super().__init__()
@@ -49,15 +51,15 @@ class NNMaskGeneratorNetwork(BaseMaskGeneratorNetwork):
         x = self.fc3(x)  # Apply third fully-connected layer
         #x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
-        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
+        w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
         #  w = torch.sigmoid(self.sigmoid_param * x)
-        w = x ** 2
-        w = w / w.sum()
+        #w = x ** 2
+        #w = w / w.sum()
 
         return w
 
 
-class IdentityMaskGenerator(BaseMaskGeneratorNetwork):
+class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, learnable_sigmoid=True,
                  default_value_sigmoid_param=10):
         super().__init__()
@@ -93,10 +95,10 @@ class IdentityMaskGenerator(BaseMaskGeneratorNetwork):
             self.sigmoid_param.data = default_sigmoid_param
 
 
-class GCNNodeClassifier(BaseMaskGeneratorNetwork):
+class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, num_classes, learnable_sigmoid=True,
                  default_value_sigmoid_param=10):
-        super(GCNNodeClassifier, self).__init__()
+        super(GCNNodeClassifierNetwork, self).__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim, dtype=DTYPE)
         self.conv2 = GCNConv(hidden_dim, num_classes, dtype=DTYPE)
         self.skip_connection = nn.Identity(input_dim, num_classes,

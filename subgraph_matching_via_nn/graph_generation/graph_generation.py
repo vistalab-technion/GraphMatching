@@ -1,6 +1,6 @@
 import networkx as nx
 import numpy as np
-
+from abc import ABC, abstractmethod
 
 
 def generate_random_degree_sequence(n):
@@ -45,3 +45,24 @@ def generate_graph_with_degree_sequence(degree_sequence):
                 break
 
     return graph
+
+
+
+
+class BaseGraphGenerator(ABC):
+    """
+    A base class for graph generator. Objects from this class contain some method to
+     generate graphs
+    """
+
+    def __init__(self):
+        super().__init__()
+
+
+    def generate(self, num_graphs : int):
+        """"
+        a method to generate
+
+        :param num_graphs: number of graphs to generate
+        """
+        pass

@@ -3,7 +3,7 @@ from livelossplot import PlotLosses
 from torch import optim
 import numpy as np
 from subgraph_matching_via_nn.composite_nn.compiste_nn import CompositeNeuralNetwork
-from subgraph_matching_via_nn.graph_metric_nn.graph_matric_nn import GraphMetricNetwork
+from subgraph_matching_via_nn.graph_metric_networks.graph_matric_nn import GraphMetricNetwork
 
 
 def nn_subgraph_localization(A: torch.Tensor,

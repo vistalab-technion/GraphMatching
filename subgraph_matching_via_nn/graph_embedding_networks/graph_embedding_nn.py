@@ -1,7 +1,14 @@
 from torch import nn, cat
 
 
-class MomentEmbeddingNetwork(nn.Module):
+class BaseGraphEmbeddingNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, A, w):
+        pass
+
+class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_moments, moments_type='standardized'):
         super().__init__()
         self._moments_type = moments_type

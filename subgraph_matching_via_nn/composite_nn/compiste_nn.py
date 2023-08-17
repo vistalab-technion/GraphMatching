@@ -1,15 +1,15 @@
 from torch import nn
 
+from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks import \
+    BaseNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import \
-    MomentEmbeddingNetwork
-from subgraph_matching_via_nn.mask_gen_networks.mask_gen_networks import \
-    BaseMaskGeneratorNetwork
+    BaseGraphEmbeddingNetwork
 
 
 class CompositeNeuralNetwork(nn.Module):
     def __init__(self,
-                 mask_gen_network: BaseMaskGeneratorNetwork,
-                 embedding_network: MomentEmbeddingNetwork):
+                 mask_gen_network: BaseNodeClassifierNetwork,
+                 embedding_network: BaseGraphEmbeddingNetwork):
         super().__init__()
 
         self.mask_gen_network = mask_gen_network
