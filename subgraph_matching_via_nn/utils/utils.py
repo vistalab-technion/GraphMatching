@@ -35,30 +35,47 @@ def plot_indicator(w_list, labels):
     plt.show()
 
 
-def plot_graph_with_colors(G, G_sub, w=None, title='', ax=None,
-                           colorbar=True, seed=42, draw_labels = False):
-    if w is None:
-        # Generate a list of colors for nodes, red for subgraph nodes and green for the rest
-        node_colors = ['green' if node in G_sub.nodes() else 'red' for node in
-                       G.nodes()]
+def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph, w=None,
+                           edge_indicator: dict = None, title: str = '', ax=None,
+                           colorbar: bool = True, seed: int = 42,
+                           draw_labels: bool = False):
+    # Define the colors for the colormap
+    colors = ['red', 'yellow', 'green']  # Red to Green
+    cmap = mcolors.LinearSegmentedColormap.from_list('my_cmap', colors)
 
-        # Generate a list of colors for edges, red for subgraph edges and green for the rest
-        edge_colors = ['green' if edge in G_sub.edges() else 'red' for edge in
+    if edge_indicator is not None:
+        norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
+                                 vmax=max(edge_indicator.values()))
+        edge_labels = [norm(edge_indicator[(u, v)]) for u, v in
                        G.edges()]
+        node_labels = node_indicator_from_edge_indicator(G=G,
+                                                         edge_indicator=edge_indicator)
+        # node_labels = [1.0 if node in G_sub.nodes() else 0 for node in
+        #                G.nodes()]
     else:
-        # Define the colors for the colormap
-        colors = ['red', 'yellow', 'green']  # Red to Green
-        cmap = mcolors.LinearSegmentedColormap.from_list('my_cmap', colors)
+        if w is not None:
+            # Normalize w to match the colormap range
+            norm = mcolors.Normalize(vmin=min(w), vmax=max(w))
 
-        # Normalize w to match the colormap range
-        norm = mcolors.Normalize(vmin=min(w), vmax=max(w))
+            # Generate a list of colors for nodes based on w values
+            node_labels = norm(w)
+            edge_labels = [norm((w[list(G.nodes).index(u)] +
+                                 w[list(G.nodes).index(v)]) / 2.0) for u, v in
+                           G.edges()]
 
-        # Generate a list of colors for nodes based on w values
-        node_colors = cmap(norm(w))
-        # Generate a list of colors for edges based on the nodes they connect
-        edge_colors = [cmap(norm((w[list(G.nodes).index(u)] +
-                                  w[list(G.nodes).index(v)]) / 2.0)) for u, v in
-                       G.edges()]
+        else:
+
+            # Generate a list of colors for nodes, red for subgraph nodes and green
+            # for the rest
+            node_labels = [1.0 if node in G_sub.nodes() else 0.0 for node in
+                           G.nodes()]
+            # Generate a list of colors for edges, red for subgraph edges and green
+            # for the rest
+            edge_labels = [1.0 if edge in G_sub.edges() else 0.0 for edge in
+                           G.edges()]
+
+    node_colors = cmap(node_labels)
+    edge_colors = cmap(edge_labels)
 
     # Set a fixed seed for the layout algorithm
     pos = nx.spring_layout(G, seed=seed)  # Layout algorithm for graph visualization
@@ -75,7 +92,7 @@ def plot_graph_with_colors(G, G_sub, w=None, title='', ax=None,
     ax.set_axis_off()  # Turn off the axis
 
     # Add colorbar
-    if w is not None and colorbar:
+    if edge_indicator is not None or w is not None and colorbar:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
@@ -119,10 +136,64 @@ def uniform_dist(n):
     return x / x.sum()
 
 
-def align_subgraph_edges_with_full_graph_edges(sub_graph: nx.Graph, full_graph: nx.Graph):
+def align_subgraph_edges_with_full_graph_edges(sub_graph: nx.Graph,
+                                               full_graph: nx.Graph):
     edges_to_add = []
     for node_i, node_j in full_graph.edges:
         if node_i in sub_graph.nodes:
             if not sub_graph.has_edge(node_i, node_j):
                 edges_to_add.append((node_i, node_j))
     return edges_to_add
+
+
+def get_node_indicator(G: nx.graph, G_sub: nx.graph):
+    """
+    Create node indicator for G_sub in G (assuming G_sub was extracted from G)
+
+    :param G: A networkx graph
+    :param G_sub: A networkx sub-graph of G
+    :return: w_indicator - a vector with w[i] ==1 if node i of G is a node in G_sub
+    , otherwise w_indicator[i]==0.
+    """
+    # Set the indices corresponding to the subgraph nodes to 1
+    subgraph_node_indices = [list(G.nodes()).index(node) for node in G_sub.nodes()]
+    # subgraph_node_indices = list(G_sub.nodes())
+    w_indicator = np.zeros(len(G.nodes()))
+    w_indicator[subgraph_node_indices] = 1.0
+    return w_indicator
+
+
+def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
+    """
+    Create edge indicator for G_sub in G (assuming G_sub was extracted from G)
+
+    :param G: A networkx graph
+    :param G_sub: A networkx sub-graph of G
+    :return: edge_indicator - dict with values
+    edge_indicator[(i,j)] == edge_indicator[(j,i)] ==1 if (i,j) is an edge of G_sub,
+    and 0 otherwise.
+    """
+    edge_indicator = \
+        {(min(u, v), max(u, v)): 1 if (min(u, v), max(u, v))
+                                      in G_sub.edges() else 0 for u, v in G.edges()}
+
+    # Create symmetric adjacency matrix
+    num_nodes = len(G.nodes())
+    adj_matrix = np.zeros((num_nodes, num_nodes))
+
+    for (i, j), val in edge_indicator.items():
+        adj_matrix[i][j] = val
+        adj_matrix[j][i] = val  # Ensure it's symmetric
+
+    return edge_indicator, adj_matrix
+
+
+def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
+    # Create node incident vector
+    w = [0] * len(G.nodes())
+    for edge, val in edge_indicator.items():
+        if val == 1:
+            u, v = edge
+            w[list(G.nodes).index(u)] = 1.0
+            w[list(G.nodes).index(v)] = 1.0
+    return w

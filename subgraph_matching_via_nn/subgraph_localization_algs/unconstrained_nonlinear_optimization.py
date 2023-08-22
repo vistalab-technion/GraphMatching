@@ -1,27 +1,43 @@
+from typing import Optional
+
+import networkx as nx
 import torch
 from livelossplot import PlotLosses
 from torch import optim
 import numpy as np
 from subgraph_matching_via_nn.composite_nn.compiste_nn import CompositeNeuralNetwork
-from subgraph_matching_via_nn.graph_metric_networks.graph_matric_nn import GraphMetricNetwork
+from subgraph_matching_via_nn.graph_metric_networks.graph_matric_nn import \
+    GraphMetricNetwork
+from subgraph_matching_via_nn.graph_processors.graph_processors import \
+    BaseGraphProcessor, GraphProcessor
+from subgraph_matching_via_nn.utils.utils import uniform_dist
 
 
-def nn_subgraph_localization(A: torch.Tensor,
-                             subgraph_embedding_nn: CompositeNeuralNetwork,
+def nn_subgraph_localization(G: nx.graph,
+                             G_sub: nx.graph,
+                             composite_nn: CompositeNeuralNetwork,
                              graph_metric_nn: GraphMetricNetwork,
-                             params: dict):
+                             params: dict,
+                             graph_processor: Optional[BaseGraphProcessor] = GraphProcessor(),
+                             dtype=torch.double):
     # Create your optimizer
     lr = params['lr']
-    optimizer = optim.SGD(subgraph_embedding_nn.parameters(), lr=lr)
+    optimizer = optim.SGD(composite_nn.parameters(), lr=lr)
 
     liveloss = PlotLosses(mode='notebook')
     # Set the desired figure size (width, height)
+    G = graph_processor.pre_process(G)
+    G_sub = graph_processor.pre_process(G_sub)
     x0 = params.get("x0", None)
-    embedding_sub = params['embedding_gt']
+    A = torch.tensor(nx.to_numpy_array(G)).type(dtype)
+    A_sub = torch.tensor(nx.to_numpy_array(G_sub)).type(dtype)
+    embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
+                                                   w=uniform_dist(
+                                                       A_sub.shape[0]).detach())
     for iteration in range(params["maxiter"]):
         # Set the model to training mode
-        subgraph_embedding_nn.train()
-        embedding_full, w = subgraph_embedding_nn(A, x0)
+        composite_nn.train()
+        embedding_full, w = composite_nn(A, x0)
         loss = graph_metric_nn(embedding_full=embedding_full,
                                embedding_subgraph=embedding_sub)  # + regularization
 
@@ -62,8 +78,6 @@ def graph_entropy(A, w, params):
 
 
 def binary_penalty(A, w, params):
-    #reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
-    reg = torch.sum(w * (1/params["m"] - w) ** 2)
+    # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
+    reg = torch.sum(w * (1 / params["m"] - w) ** 2)
     return reg
-
-

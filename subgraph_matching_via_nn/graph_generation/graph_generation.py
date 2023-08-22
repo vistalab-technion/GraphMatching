@@ -47,8 +47,6 @@ def generate_graph_with_degree_sequence(degree_sequence):
     return graph
 
 
-
-
 class BaseGraphGenerator(ABC):
     """
     A base class for graph generator. Objects from this class contain some method to
@@ -58,8 +56,7 @@ class BaseGraphGenerator(ABC):
     def __init__(self):
         super().__init__()
 
-
-    def generate(self, num_graphs : int):
+    def generate(self, num_graphs: int):
         """"
         a method to generate
 

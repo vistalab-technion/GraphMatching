@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -5,16 +7,22 @@ from torch_geometric.nn import GCNConv
 import torch_geometric.utils as utils
 from torch_geometric.utils import from_scipy_sparse_matrix
 
+from subgraph_matching_via_nn.graph_generation.graph_generation import \
+    BaseGraphGenerator
 from subgraph_matching_via_nn.utils.utils import DTYPE
 
 
 class BaseNodeClassifierNetwork(nn.Module):
-    def __init__(self, subgraph : None, graph_generator : None):
+    def __init__(self,
+                 subgraph=None,
+                 graph_generator: BaseGraphGenerator = None, ):
         super().__init__()
+        self._subgraph = subgraph
+        self._graph_generator = graph_generator
 
-    def init_params(self, subgraph):
-        # create examples with the graph generator
-        # train node classifier
+    def train_node_classifier(self):
+        # Todo: create examples with the graph generator
+        # Todo: train node classifier
         pass
 
 
@@ -49,12 +57,12 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = x + skip_x  # Add skip connection
         x = F.relu(x)  # Apply ReLU activation function
         x = self.fc3(x)  # Apply third fully-connected layer
-        #x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
+        # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
         w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
         #  w = torch.sigmoid(self.sigmoid_param * x)
-        #w = x ** 2
-        #w = w / w.sum()
+        # w = x ** 2
+        # w = w / w.sum()
 
         return w
 
@@ -102,7 +110,7 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         self.conv1 = GCNConv(input_dim, hidden_dim, dtype=DTYPE)
         self.conv2 = GCNConv(hidden_dim, num_classes, dtype=DTYPE)
         self.skip_connection = nn.Identity(input_dim, num_classes,
-                                         dtype=torch.float)  # Skip connection
+                                           dtype=torch.float)  # Skip connection
         self.sigmoid_param = nn.Parameter(torch.Tensor([default_value_sigmoid_param]))
         if not learnable_sigmoid:
             self.sigmoid_param.requires_grad = False

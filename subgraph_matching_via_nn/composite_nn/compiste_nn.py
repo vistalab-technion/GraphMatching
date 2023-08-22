@@ -8,11 +8,11 @@ from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import
 
 class CompositeNeuralNetwork(nn.Module):
     def __init__(self,
-                 mask_gen_network: BaseNodeClassifierNetwork,
+                 node_classifier_network: BaseNodeClassifierNetwork,
                  embedding_network: BaseGraphEmbeddingNetwork):
         super().__init__()
 
-        self.mask_gen_network = mask_gen_network
+        self.mask_gen_network = node_classifier_network
         self.embedding_network = embedding_network
 
     def forward(self, A, x=None):
