@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch_geometric.nn import GCNConv
 import torch_geometric.utils as utils
 from torch_geometric.utils import from_scipy_sparse_matrix
+import networkx as nx
 
 from subgraph_matching_via_nn.graph_generation.graph_generation import \
     BaseGraphGenerator
@@ -13,17 +14,15 @@ from subgraph_matching_via_nn.utils.utils import DTYPE
 
 
 class BaseNodeClassifierNetwork(nn.Module):
-    def __init__(self,
-                 subgraph=None,
-                 graph_generator: BaseGraphGenerator = None, ):
+    def __init__(self):
         super().__init__()
-        self._subgraph = subgraph
-        self._graph_generator = graph_generator
 
-    def train_node_classifier(self):
+    def train_node_classifier(self,
+                              G_sub: nx.graph = None,
+                              graph_generator: BaseGraphGenerator = None):
         # Todo: create examples with the graph generator
         # Todo: train node classifier
-        pass
+        return
 
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):

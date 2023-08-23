@@ -35,7 +35,7 @@ def plot_indicator(w_list, labels):
     plt.show()
 
 
-def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph, w=None,
+def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph, node_indicator=None,
                            edge_indicator: dict = None, title: str = '', ax=None,
                            colorbar: bool = True, seed: int = 42,
                            draw_labels: bool = False):
@@ -46,36 +46,34 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph, w=None,
     if edge_indicator is not None:
         norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
                                  vmax=max(edge_indicator.values()))
-        edge_labels = [norm(edge_indicator[(u, v)]) for u, v in
+        edge_probabilities = [norm(edge_indicator[(u, v)]) for u, v in
                        G.edges()]
-        node_labels = node_indicator_from_edge_indicator(G=G,
+        node_probabilities = node_indicator_from_edge_indicator(G=G,
                                                          edge_indicator=edge_indicator)
-        # node_labels = [1.0 if node in G_sub.nodes() else 0 for node in
-        #                G.nodes()]
     else:
-        if w is not None:
+        if node_indicator is not None:
             # Normalize w to match the colormap range
-            norm = mcolors.Normalize(vmin=min(w), vmax=max(w))
+            norm = mcolors.Normalize(vmin=min(node_indicator), vmax=max(node_indicator))
 
             # Generate a list of colors for nodes based on w values
-            node_labels = norm(w)
-            edge_labels = [norm((w[list(G.nodes).index(u)] +
-                                 w[list(G.nodes).index(v)]) / 2.0) for u, v in
+            node_probabilities = norm(node_indicator)
+            edge_probabilities = [norm((node_indicator[list(G.nodes).index(u)] +
+                                 node_indicator[list(G.nodes).index(v)]) / 2.0) for u, v in
                            G.edges()]
 
         else:
 
             # Generate a list of colors for nodes, red for subgraph nodes and green
             # for the rest
-            node_labels = [1.0 if node in G_sub.nodes() else 0.0 for node in
+            node_probabilities = [1.0 if node in G_sub.nodes() else 0.0 for node in
                            G.nodes()]
             # Generate a list of colors for edges, red for subgraph edges and green
             # for the rest
-            edge_labels = [1.0 if edge in G_sub.edges() else 0.0 for edge in
+            edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
                            G.edges()]
 
-    node_colors = cmap(node_labels)
-    edge_colors = cmap(edge_labels)
+    node_colors = cmap(node_probabilities)
+    edge_colors = cmap(edge_probabilities)
 
     # Set a fixed seed for the layout algorithm
     pos = nx.spring_layout(G, seed=seed)  # Layout algorithm for graph visualization
@@ -92,7 +90,7 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph, w=None,
     ax.set_axis_off()  # Turn off the axis
 
     # Add colorbar
-    if edge_indicator is not None or w is not None and colorbar:
+    if edge_indicator is not None or node_indicator is not None and colorbar:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
@@ -194,6 +192,6 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
     for edge, val in edge_indicator.items():
         if val == 1:
             u, v = edge
-            w[list(G.nodes).index(u)] = 1.0
+            w[list(G.nodes).index(u)] = 1.0 # todo: color according to avg of incident edges
             w[list(G.nodes).index(v)] = 1.0
     return w

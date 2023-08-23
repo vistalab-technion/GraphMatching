@@ -18,17 +18,19 @@ def nn_subgraph_localization(G: nx.graph,
                              composite_nn: CompositeNeuralNetwork,
                              graph_metric_nn: GraphMetricNetwork,
                              params: dict,
-                             graph_processor: Optional[BaseGraphProcessor] = GraphProcessor(),
+                             graph_processor: Optional[BaseGraphProcessor] =
+                             GraphProcessor(),
                              dtype=torch.double):
     # Create your optimizer
     lr = params['lr']
+    reg_term = params['reg_term']
     optimizer = optim.SGD(composite_nn.parameters(), lr=lr)
-
+    x0 = params.get("x0", None)
     liveloss = PlotLosses(mode='notebook')
-    # Set the desired figure size (width, height)
+
+    # preprocess the graphs, e.g. to get a line-graph
     G = graph_processor.pre_process(G)
     G_sub = graph_processor.pre_process(G_sub)
-    x0 = params.get("x0", None)
     A = torch.tensor(nx.to_numpy_array(G)).type(dtype)
     A_sub = torch.tensor(nx.to_numpy_array(G_sub)).type(dtype)
     embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
@@ -41,7 +43,7 @@ def nn_subgraph_localization(G: nx.graph,
         loss = graph_metric_nn(embedding_full=embedding_full,
                                embedding_subgraph=embedding_sub)  # + regularization
 
-        reg = binary_penalty(A, w, params)
+        reg = reg_term(A, w, params)
         full_loss = loss + params["reg_param"] * reg
 
         optimizer.zero_grad()
@@ -59,6 +61,9 @@ def edited_Laplacian(A, w):
     L = (torch.diag(A_edited.sum(axis=1)) - A_edited)
     return L
 
+
+
+# regularization terms
 
 def spectral_reg(A, w, params):
     L_edited = edited_Laplacian(A, w * (params["m"] ** 2))

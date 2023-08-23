@@ -29,9 +29,3 @@ class GraphProcessor(BaseGraphProcessor):
         else:
             return graph
 
-    def post_process(self, graph: nx.graph, w = None):
-        # performing a sequence of operations on the graph as a post-process
-        if self._to_bipartite:
-            pass
-        if self._to_line:
-            return nx.line_graph(graph)
