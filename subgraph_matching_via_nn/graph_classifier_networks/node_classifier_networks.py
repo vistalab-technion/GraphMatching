@@ -10,11 +10,22 @@ import networkx as nx
 
 from subgraph_matching_via_nn.graph_generation.graph_generation import \
     BaseGraphGenerator
-from subgraph_matching_via_nn.utils.utils import DTYPE
+from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
+def sigmoid_layer(x, param):
+    return torch.sigmoid(param * x)
+
+def softmax_layer(x, param):
+    return F.softmax(x, dim=0)
+
+def squared_normalized_layer(x, param):
+    x = x**2
+    x=x/x.sum()
+    return x
 
 class BaseNodeClassifierNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, last_layer):
+        self._last_layer = last_layer
         super().__init__()
 
     def train_node_classifier(self,
@@ -27,17 +38,17 @@ class BaseNodeClassifierNetwork(nn.Module):
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, output_dim, learnable_sigmoid=True,
-                 default_sigmoid_param_value=10):
-        super().__init__()
+                 default_sigmoid_param_value=10, last_layer = softmax_layer):
+        super().__init__(last_layer = last_layer)
 
         self.fc1 = nn.Linear(input_dim, hidden_dim,
-                             dtype=DTYPE)  # First Fully-Connected Layer
+                             dtype=TORCH_DTYPE)  # First Fully-Connected Layer
         self.fc2 = nn.Linear(hidden_dim, hidden_dim,
-                             dtype=DTYPE)  # Second Fully-Connected Layer
+                             dtype=TORCH_DTYPE)  # Second Fully-Connected Layer
         self.fc3 = nn.Linear(hidden_dim, output_dim,
-                             dtype=DTYPE)  # Third Fully-Connected Layer with output size output_dim
+                             dtype=TORCH_DTYPE)  # Third Fully-Connected Layer with output size output_dim
         self.skip_connection = nn.Linear(input_dim, hidden_dim,
-                                         dtype=DTYPE)  # Skip connection
+                                         dtype=TORCH_DTYPE)  # Skip connection
         self.sigmoid_param = nn.Parameter(torch.Tensor([default_sigmoid_param_value]))
         if not learnable_sigmoid:
             self.sigmoid_param.requires_grad = False
@@ -45,7 +56,7 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
     def forward(self, A, x=None):
         if x is None:
-            x = self.uniform_feature.type(DTYPE)
+            x = self.uniform_feature.type(TORCH_DTYPE)
 
         skip_x = self.skip_connection(x)  # Compute skip connection
 
@@ -58,7 +69,8 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = self.fc3(x)  # Apply third fully-connected layer
         # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
-        w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
+        w = self._last_layer(x,self.sigmoid_param)
+        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
         #  w = torch.sigmoid(self.sigmoid_param * x)
         # w = x ** 2
         # w = w / w.sum()
@@ -68,12 +80,12 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, learnable_sigmoid=True,
-                 default_value_sigmoid_param=10):
-        super().__init__()
+                 default_value_sigmoid_param=10, last_layer=softmax_layer):
+        super().__init__(last_layer=last_layer)
 
         self._default_value_sigmoid_param = default_value_sigmoid_param
 
-        self.weights = nn.Parameter(torch.Tensor(input_dim, 1).type(DTYPE))
+        self.weights = nn.Parameter(torch.Tensor(input_dim, 1).type(TORCH_DTYPE))
         self.sigmoid_param = nn.Parameter(torch.Tensor([default_value_sigmoid_param]))
         if not learnable_sigmoid:
             self.sigmoid_param.requires_grad = False
@@ -85,8 +97,8 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
         # x = torch.matmul(A, self.weights)
         x = self.weights
         # w = torch.sigmoid(self.sigmoid_param * x)
-        w = x ** 2
-        w = w / w.sum()
+        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
+        w = self._last_layer(x,self.sigmoid_param)
 
         return w
 
@@ -104,10 +116,10 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, num_classes, learnable_sigmoid=True,
-                 default_value_sigmoid_param=10):
-        super(GCNNodeClassifierNetwork, self).__init__()
-        self.conv1 = GCNConv(input_dim, hidden_dim, dtype=DTYPE)
-        self.conv2 = GCNConv(hidden_dim, num_classes, dtype=DTYPE)
+                 default_value_sigmoid_param=10, last_layer=softmax_layer):
+        super(GCNNodeClassifierNetwork, self).__init__(last_layer=last_layer)
+        self.conv1 = GCNConv(input_dim, hidden_dim, dtype=TORCH_DTYPE)
+        self.conv2 = GCNConv(hidden_dim, num_classes, dtype=TORCH_DTYPE)
         self.skip_connection = nn.Identity(input_dim, num_classes,
                                            dtype=torch.float)  # Skip connection
         self.sigmoid_param = nn.Parameter(torch.Tensor([default_value_sigmoid_param]))
@@ -126,7 +138,11 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = F.relu(x)
         x = self.conv2(x, edge_index)
         x = x + skip_x
-        x = torch.sigmoid(self.sigmoid_param * x)
+        # x = torch.sigmoid(self.sigmoid_param * x)
         # x = x**2
         # x=x/x.sum()
+        x = self._last_layer(x, self.sigmoid_param)
+
         return x.double()
+
+

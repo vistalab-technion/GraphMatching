@@ -36,9 +36,9 @@ def nn_subgraph_localization(G: nx.graph,
     embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
                                                    w=uniform_dist(
                                                        A_sub.shape[0]).detach())
+    # Set the model to training mode
+    composite_nn.train()
     for iteration in range(params["maxiter"]):
-        # Set the model to training mode
-        composite_nn.train()
         embedding_full, w = composite_nn(A, x0)
         loss = graph_metric_nn(embedding_full=embedding_full,
                                embedding_subgraph=embedding_sub)  # + regularization
@@ -72,6 +72,7 @@ def spectral_reg(A, w, params):
 
 
 def graph_total_variation(A, w, params):
+    # todo: should check why it doesn't give 0 with gt mask
     diff = torch.abs(torch.matmul(A, w))
     total_variation = torch.sum(diff)
     return total_variation

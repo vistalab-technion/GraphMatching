@@ -57,3 +57,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
     def init_params(self):
         pass
+
+class NeuralSEDEmbeddingNetwork(BaseGraphEmbeddingNetwork):
+    pass
+
