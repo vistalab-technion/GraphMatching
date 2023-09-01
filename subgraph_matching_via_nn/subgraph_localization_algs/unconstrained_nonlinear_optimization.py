@@ -38,7 +38,7 @@ def nn_subgraph_localization(G: nx.graph,
                                                        A_sub.shape[0]).detach())
     # Set the model to training mode
     composite_nn.train()
-    for iteration in range(params["maxiter"]):
+    for iteration in range(params["maxiter"]): # TODO: add stopping condition
         embedding_full, w = composite_nn(A, x0)
         loss = graph_metric_nn(embedding_full=embedding_full,
                                embedding_subgraph=embedding_sub)  # + regularization
@@ -52,6 +52,8 @@ def nn_subgraph_localization(G: nx.graph,
 
         if iteration % params['k_update_plot'] == 0:
             print(f"Iteration {iteration}, Loss: {loss.item()}")
+            print(f"Iteration {iteration}, Reg: {reg.item()}")
+            print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
             liveloss.update({'loss': loss.item()})
             liveloss.send()
 

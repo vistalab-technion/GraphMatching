@@ -12,16 +12,20 @@ from subgraph_matching_via_nn.graph_generation.graph_generation import \
     BaseGraphGenerator
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
+
 def sigmoid_layer(x, param):
     return torch.sigmoid(param * x)
+
 
 def softmax_layer(x, param):
     return F.softmax(x, dim=0)
 
+
 def squared_normalized_layer(x, param):
-    x = x**2
-    x=x/x.sum()
+    x = x ** 2
+    x = x / x.sum()
     return x
+
 
 class BaseNodeClassifierNetwork(nn.Module):
     def __init__(self, last_layer):
@@ -35,11 +39,50 @@ class BaseNodeClassifierNetwork(nn.Module):
         # Todo: train node classifier
         return
 
+    def init_params(self, default_weights=None, default_sigmoid_param=None):
+        pass
+
+
+class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
+    def __init__(self, input_dim, learnable_sigmoid=True,
+                 default_value_sigmoid_param=10, last_layer=softmax_layer):
+        super().__init__(last_layer=last_layer)
+
+        self._default_value_sigmoid_param = default_value_sigmoid_param
+
+        self.weights = nn.Parameter(torch.Tensor(input_dim, 1).type(TORCH_DTYPE))
+        self.sigmoid_param = nn.Parameter(torch.Tensor([default_value_sigmoid_param]))
+        if not learnable_sigmoid:
+            self.sigmoid_param.requires_grad = False
+        self.register_buffer('uniform_feature', torch.ones(1, input_dim))
+
+        self.init_params()
+
+    def forward(self, A, x=None):
+        # x = torch.matmul(A, self.weights)
+        x = self.weights
+        # w = torch.sigmoid(self.sigmoid_param * x)
+        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
+        w = self._last_layer(x, self.sigmoid_param)
+
+        return w
+
+    def init_params(self, default_weights=None, default_sigmoid_param=None):
+        if default_weights is None:
+            self.weights.data.fill_(1 / len(self.weights))
+        else:
+            self.weights.data = default_weights
+
+        if default_sigmoid_param is None:
+            self.sigmoid_param.data.fill_(self._default_value_sigmoid_param)
+        else:
+            self.sigmoid_param.data = default_sigmoid_param
+
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, output_dim, learnable_sigmoid=True,
-                 default_sigmoid_param_value=10, last_layer = softmax_layer):
-        super().__init__(last_layer = last_layer)
+                 default_sigmoid_param_value=10, last_layer=softmax_layer):
+        super().__init__(last_layer=last_layer)
 
         self.fc1 = nn.Linear(input_dim, hidden_dim,
                              dtype=TORCH_DTYPE)  # First Fully-Connected Layer
@@ -69,49 +112,13 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = self.fc3(x)  # Apply third fully-connected layer
         # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
-        w = self._last_layer(x,self.sigmoid_param)
+        w = self._last_layer(x, self.sigmoid_param)
         # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
         #  w = torch.sigmoid(self.sigmoid_param * x)
         # w = x ** 2
         # w = w / w.sum()
 
         return w
-
-
-class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, input_dim, learnable_sigmoid=True,
-                 default_value_sigmoid_param=10, last_layer=softmax_layer):
-        super().__init__(last_layer=last_layer)
-
-        self._default_value_sigmoid_param = default_value_sigmoid_param
-
-        self.weights = nn.Parameter(torch.Tensor(input_dim, 1).type(TORCH_DTYPE))
-        self.sigmoid_param = nn.Parameter(torch.Tensor([default_value_sigmoid_param]))
-        if not learnable_sigmoid:
-            self.sigmoid_param.requires_grad = False
-        self.register_buffer('uniform_feature', torch.ones(1, input_dim))
-
-        self.init_params()
-
-    def forward(self, A, x=None):
-        # x = torch.matmul(A, self.weights)
-        x = self.weights
-        # w = torch.sigmoid(self.sigmoid_param * x)
-        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
-        w = self._last_layer(x,self.sigmoid_param)
-
-        return w
-
-    def init_params(self, default_weights=None, default_sigmoid_param=None):
-        if default_weights is None:
-            self.weights.data.fill_(1 / len(self.weights))
-        else:
-            self.weights.data = default_weights
-
-        if default_sigmoid_param is None:
-            self.sigmoid_param.data.fill_(self._default_value_sigmoid_param)
-        else:
-            self.sigmoid_param.data = default_sigmoid_param
 
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
@@ -146,3 +153,44 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         return x.double()
 
 
+class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
+    def __init__(self, num_nodes, embedding_dim, num_iterations, last_layer):
+        super().__init__(last_layer=last_layer)
+
+        # Initialization
+        self.L_learnable = nn.Parameter(torch.rand((num_nodes, num_nodes)))
+        self.num_iterations = num_iterations
+        self.fc = nn.Linear(embedding_dim,
+                            1)  # Sample output layer for binary classification
+
+    def E(self, w):
+        # Define your E(w) function here based on the optimal indicator function.
+        # For simplicity, we return an identity matrix
+        return torch.eye(w.size(0))
+
+    def forward(self, rho, epsilon, initial_indicator=None):
+        if initial_indicator is None:
+            w_k = torch.rand((self.L_learnable.size(0),))
+        else:
+            w_k = initial_indicator
+
+        for _ in range(self.num_iterations):
+            L = self.L_learnable - rho * self.E(w_k)
+            y_k1 = torch.linalg.solve(L + epsilon * torch.eye(L.size(0)), w_k)
+
+            # Update the indicator
+            w_k = y_k1 / torch.norm(y_k1)
+
+        # Node classification
+        out = F.sigmoid(self.fc(w_k))
+        return out
+
+
+# # Create the model
+# model = GraphPowerIterationNetwork(num_nodes=10, embedding_dim=10, num_iterations=5)
+#
+# # Sample forward pass
+# rho = 0.5
+# epsilon = 0.01
+# output = model(rho, epsilon)
+# print(output)
