@@ -5,7 +5,7 @@ import torch
 from livelossplot import PlotLosses
 from torch import optim
 import numpy as np
-from subgraph_matching_via_nn.composite_nn.compiste_nn import CompositeNeuralNetwork
+from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.graph_metric_networks.graph_matric_nn import \
     GraphMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import \
@@ -33,19 +33,12 @@ def nn_subgraph_localization(G: nx.graph,
     G_sub = graph_processor.pre_process(G_sub)
     A = torch.tensor(nx.to_numpy_array(G)).type(dtype)
     A_sub = torch.tensor(nx.to_numpy_array(G_sub)).type(dtype)
-    # embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
-    #                                                w=uniform_dist(
-    #                                                    A_sub.shape[0]).detach())
-
-    embeddings_sub = []
-    for embedding_network in composite_nn.embedding_networks:
-        embeddings_sub.append(embedding_network(
-            A=A_sub.detach().type(dtype),
-            w=uniform_dist(A_sub.shape[0]).detach()))
+    embeddings_sub = composite_nn.embed(A=A_sub.detach().type(dtype),
+                                        w=uniform_dist(A_sub.shape[0]).detach())
 
     # Set the model to training mode
     composite_nn.train()
-    for iteration in range(params["maxiter"]): # TODO: add stopping condition
+    for iteration in range(params["maxiter"]):  # TODO: add stopping condition
         embeddings_full, w = composite_nn(A, x0)
         loss = graph_metric_nn(embeddings_full=embeddings_full,
                                embeddings_subgraph=embeddings_sub)  # + regularization
@@ -69,7 +62,6 @@ def edited_Laplacian(A, w):
     A_edited = A - A * ((w - w.T) ** 2)
     L = (torch.diag(A_edited.sum(axis=1)) - A_edited)
     return L
-
 
 
 # regularization terms

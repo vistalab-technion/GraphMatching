@@ -19,14 +19,22 @@ class CompositeNeuralNetwork(nn.Module):
 
     def forward(self, A, x=None):
         # compute node classifier
-        w = self.node_classifier_network(A=A, x=x)
+        w = self.classify(A=A, x=x)
 
         # compute embedding
+        embeddings = self.embed(A=A, w=w)
+
+        return embeddings, w
+
+    def embed(self, A, w):
         embeddings = []
         for embedding_network in self.embedding_networks:
             embeddings.append(embedding_network(A=A, w=w))
+        return embeddings
 
-        return embeddings, w
+    def classify(self, A, x):
+        w = self.node_classifier_network(A=A, x=x)
+        return w
 
     def init_params(self, **kwargs):
         # TODO: dix passing of parameters to submodules

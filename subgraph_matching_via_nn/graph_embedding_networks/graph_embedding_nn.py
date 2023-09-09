@@ -77,12 +77,11 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         pass
 
 
-
 class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_eigs=5,
                  spectral_op_type='Hamiltonian',
-                 diagonal_scale : float = 1,
-                 indicator_scale : float = 1):
+                 diagonal_scale: float = 1,
+                 indicator_scale: float = 1):
         super().__init__()
         self._spectral_op_type = spectral_op_type
         self._n_eigs = n_eigs
@@ -90,9 +89,9 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._indicator_scale = indicator_scale
 
     def forward(self, A, w):
-        H = self.spectral_operator(A, w, self._diagonal_scale)
-        evals,_ = torch.linalg.eigh(H)
-        embedding = evals[:self._n_eigs-1]
+        H = self.spectral_operator(A, w)
+        evals, _ = torch.linalg.eigh(H)
+        embedding = evals[:self._n_eigs - 1]
         return embedding
 
     @staticmethod
@@ -100,11 +99,13 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         L = torch.diag(A.sum(dim=1)) - A
         return L
 
-    def spectral_operator(self, A, w, diagonal_scale):
-        #L = self.laplacian(A)a
-        v = 1-self._indicator_scale*w
-        E = A*(v-v.T)**2
-        H = self.laplacian(A-E) + diagonal_scale * torch.diag(v.squeeze())
+    def spectral_operator(self, A, w):
+        v = 1 - self._indicator_scale * w
+        E = A * (v - v.T) ** 2
+        if self._spectral_op_type == 'Hamiltonian':
+            H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(v.squeeze())
+        if self._spectral_op_type == 'Adjacency':
+            H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
         return H
 
     def init_params(self):
