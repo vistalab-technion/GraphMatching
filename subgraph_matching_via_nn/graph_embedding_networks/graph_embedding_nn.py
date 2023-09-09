@@ -92,7 +92,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def forward(self, A, w):
         H = self.spectral_operator(A, w, self._diagonal_scale)
         evals,_ = torch.linalg.eigh(H)
-        embedding = evals[:self._n_eigs]
+        embedding = evals[:self._n_eigs-1]
         return embedding
 
     @staticmethod

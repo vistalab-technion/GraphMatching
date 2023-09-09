@@ -33,15 +33,22 @@ def nn_subgraph_localization(G: nx.graph,
     G_sub = graph_processor.pre_process(G_sub)
     A = torch.tensor(nx.to_numpy_array(G)).type(dtype)
     A_sub = torch.tensor(nx.to_numpy_array(G_sub)).type(dtype)
-    embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
-                                                   w=uniform_dist(
-                                                       A_sub.shape[0]).detach())
+    # embedding_sub = composite_nn.embedding_network(A=A_sub.detach().type(dtype),
+    #                                                w=uniform_dist(
+    #                                                    A_sub.shape[0]).detach())
+
+    embeddings_sub = []
+    for embedding_network in composite_nn.embedding_networks:
+        embeddings_sub.append(embedding_network(
+            A=A_sub.detach().type(dtype),
+            w=uniform_dist(A_sub.shape[0]).detach()))
+
     # Set the model to training mode
     composite_nn.train()
     for iteration in range(params["maxiter"]): # TODO: add stopping condition
-        embedding_full, w = composite_nn(A, x0)
-        loss = graph_metric_nn(embedding_full=embedding_full,
-                               embedding_subgraph=embedding_sub)  # + regularization
+        embeddings_full, w = composite_nn(A, x0)
+        loss = graph_metric_nn(embeddings_full=embeddings_full,
+                               embeddings_subgraph=embeddings_sub)  # + regularization
 
         reg = reg_term(A, w, params)
         full_loss = loss + params["reg_param"] * reg
