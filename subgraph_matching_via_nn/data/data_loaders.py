@@ -69,8 +69,8 @@ def load_graph(type: str = 'random',
             isolated_nodes_indices = list(nx.isolates(graph))
             graph.remove_nodes_from(isolated_nodes_indices)
 
-        g_full_path = loader_params['g_full_path']
-        g_sub_path = loader_params['g_sub_path']
+        g_full_path =  loader_params['data_path'] + loader_params['g_full_path']
+        g_sub_path = loader_params['data_path'] + loader_params['g_sub_path']
 
         G = pickle.load(open(g_full_path, 'rb'))
         G_sub = pickle.load(open(g_sub_path, 'rb'))

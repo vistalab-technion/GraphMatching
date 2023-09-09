@@ -8,7 +8,7 @@ import torch_geometric.utils as utils
 from torch_geometric.utils import from_scipy_sparse_matrix
 import networkx as nx
 
-from subgraph_matching_via_nn.graph_generation.graph_generation import \
+from subgraph_matching_via_nn.graph_generators.graph_generators import \
     BaseGraphGenerator
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
@@ -61,8 +61,9 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def forward(self, A, x=None):
         # x = torch.matmul(A, self.weights)
         x = self.weights
-        # w = torch.sigmoid(self.sigmoid_param * x)
-        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
+
+        # todo: add function for internal operations. In Identity it will be pass
+
         w = self._last_layer(x, self.sigmoid_param)
 
         return w
@@ -102,7 +103,6 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
             x = self.uniform_feature.type(TORCH_DTYPE)
 
         skip_x = self.skip_connection(x)  # Compute skip connection
-
         x = self.fc1(x)  # Apply first fully-connected layer
         x = x + skip_x  # Add skip connection
         x = F.relu(x)  # Apply ReLU activation function
@@ -112,11 +112,8 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = self.fc3(x)  # Apply third fully-connected layer
         # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
+
         w = self._last_layer(x, self.sigmoid_param)
-        # w = F.softmax(x, dim=0)  # Apply softmax to get the vector w
-        #  w = torch.sigmoid(self.sigmoid_param * x)
-        # w = x ** 2
-        # w = w / w.sum()
 
         return w
 
@@ -163,9 +160,11 @@ class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
         self.fc = nn.Linear(embedding_dim,
                             1)  # Sample output layer for binary classification
 
-    def E(self, w):
+    def spectral_op(self, L, w, rho):
         # Define your E(w) function here based on the optimal indicator function.
         # For simplicity, we return an identity matrix
+
+        spectral_op = L + rho
         return torch.eye(w.size(0))
 
     def forward(self, rho, epsilon, initial_indicator=None):
@@ -175,7 +174,7 @@ class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
             w_k = initial_indicator
 
         for _ in range(self.num_iterations):
-            L = self.L_learnable - rho * self.E(w_k)
+            L = self.L_learnable + rho * self.spectral_op(w_k)
             y_k1 = torch.linalg.solve(L + epsilon * torch.eye(L.size(0)), w_k)
 
             # Update the indicator
@@ -185,6 +184,19 @@ class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
         out = F.sigmoid(self.fc(w_k))
         return out
 
+#
+# for i in range(params["maxiter"]):
+#     H = spectral_op(A, w, params)
+#     #C = (torch.eye(n) - s * w @ w.T) @ H @ H @ (torch.eye(n) - s * w @ w.T)
+#     # Compute eigenvalues and eigenvectors of A
+#     e, v = find_smallest_eigenvector(H)
+#     #e,v = inverse_power_method(A = H, epsilon=1e-8, max_iterations=500)
+#     # w = params["scale"] * v
+#     # w = v / torch.norm(v, float('inf'))
+#     # w = params["scale"] * w
+#     w = v / v.sum()
+#     #obj = w.T @ H @ w +params["c"]**2
+#     obj = obj_fun(A, w, params)
 
 # # Create the model
 # model = GraphPowerIterationNetwork(num_nodes=10, embedding_dim=10, num_iterations=5)

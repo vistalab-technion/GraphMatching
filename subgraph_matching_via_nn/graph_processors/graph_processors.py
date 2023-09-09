@@ -1,4 +1,5 @@
 from logging import exception
+from typing import Optional
 
 import networkx as nx
 import numpy as np
@@ -19,24 +20,28 @@ class BaseGraphProcessor:
 
 class GraphProcessor(BaseGraphProcessor):
 
-    def __init__(self,
-                 to_bipartite : bool = False,
-                 to_line: bool = False):
+    def __init__(self,params : dict  =  {'to_undirected' : None, 'to_line':  False}):
         super().__init__()
-        self._to_line = to_line
-        self._to_bipartite = to_bipartite
+        self._to_line = params.get("to_line", None)
+        self._to_undirected = params.get("to_undirected", None)
 
-    def pre_process(self, graph: nx.graph, edge_indicator = None):
+    def pre_process(self, graph: nx.Graph, edge_indicator=None, node_indicator=None):
         # performing a sequence of operations on the graph as a pre-process
-        if self._to_bipartite:
-            raise exception(f"to biparatite not supported yet")
+        if self._to_undirected is not None:
+            if self._to_undirected == 'symmetrize':
+                graph = nx.to_undirected(graph)
+            else:
+                raise exception(f"{self._to_undirected} not supported yet")
         if self._to_line:
             graph = nx.line_graph(graph)
             if edge_indicator is not None:
-                node_indicator_line = np.array([edge_indicator[edge] for edge in
+                node_indicator = np.array([edge_indicator[edge] for edge in
                                                 graph.nodes()])
-                return graph, node_indicator_line
-            else:
-                return graph
+
+
+        if edge_indicator is not None:
+            return graph, node_indicator
+        else:
+            return graph
 
 

@@ -1,3 +1,4 @@
+import torch
 from torch import nn, cat
 
 
@@ -8,6 +9,7 @@ class BaseGraphEmbeddingNetwork(nn.Module):
     def forward(self, A, w):
         pass
 
+
 class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_moments, moments_type='standardized'):
         super().__init__()
@@ -15,8 +17,10 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._n_moments = n_moments
 
     def forward(self, A, w):
-        if self._moments_type == 'standardized':
-            embedding = self.compute_standardized_moments(w, A, self._n_moments)
+        if self._moments_type == 'standardized_central':
+            embedding = self.compute_standardized_central_moments(w, A, self._n_moments)
+        elif self._moments_type == 'standardized_raw':
+            embedding = self.compute_standardized_raw_moments(w, A, self._n_moments)
         elif self._moments_type == 'raw':
             embedding = self.compute_raw_moments(w, A, self._n_moments)
         elif self._moments_type == 'central':
@@ -26,19 +30,33 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         return embedding
 
     @staticmethod
-    def compute_standardized_moments(w, A, n_moments):
+    def compute_standardized_central_moments(w, A, n_moments):
         mean = w.T @ A @ w
         var = w.T @ ((A @ w - mean) ** 2)
         moments = []
-        # for standardized moments, mom1 = 0, mom2 = 1 so no need to append them
+        # for standardized moments, mom1 == 0, mom2 == 1 so no need to append them
         if n_moments > 2:
             for k in range(3, n_moments + 1):
-                mom = w.T @ ((A @ w - mean) ** k)
-                moments.append(mom / (var ** (k / 2)))
+                # mom = w.T @ ((A @ w - mean) ** k)
+                # moments.append(mom / (var ** (k / 2)))
+                mom = w.T @ (((A @ w - mean) / (var ** 0.5)) ** k)
+                moments.append(mom)
         return cat(moments).squeeze()
 
     @staticmethod
-    def compute_raw_moments(w, A, n_moments):
+    def compute_standardized_raw_moments(w, A, n_moments):
+        var = w.T @ ((A @ w) ** 2)
+        moments = []
+        # for raw standardized moments, mom2 == 1 so no need to append it
+        if n_moments > 2:
+            for k in range(1, n_moments + 1):
+                if k != 2:
+                    mom = w.T @ (((A @ w) / (var ** 0.5)) ** k)
+                    moments.append(mom)
+        return cat(moments).squeeze()
+
+    @staticmethod
+    def compute_central_moments(w, A, n_moments):
         mean = w.T @ A @ w
         moments = []
         if n_moments >= 2:
@@ -48,7 +66,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         return cat(moments).squeeze()
 
     @staticmethod
-    def compute_central_moments(w, A, n_moments):
+    def compute_raw_moments(w, A, n_moments):
         moments = []
         for k in range(1, n_moments + 1):
             mom = w.T @ ((A @ w) ** k)
@@ -58,6 +76,40 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def init_params(self):
         pass
 
+
+
+class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
+    def __init__(self, n_eigs=5,
+                 spectral_op_type='Hamiltonian',
+                 diagonal_scale : float = 1,
+                 indicator_scale : float = 1):
+        super().__init__()
+        self._spectral_op_type = spectral_op_type
+        self._n_eigs = n_eigs
+        self._diagonal_scale = diagonal_scale
+        self._indicator_scale = indicator_scale
+
+    def forward(self, A, w):
+        H = self.spectral_operator(A, w, self._diagonal_scale)
+        evals,_ = torch.linalg.eigh(H)
+        embedding = evals[:self._n_eigs]
+        return embedding
+
+    @staticmethod
+    def laplacian(A):
+        L = torch.diag(A.sum(dim=1)) - A
+        return L
+
+    def spectral_operator(self, A, w, diagonal_scale):
+        #L = self.laplacian(A)a
+        v = 1-self._indicator_scale*w
+        E = A*(v-v.T)**2
+        H = self.laplacian(A-E) + diagonal_scale * torch.diag(v.squeeze())
+        return H
+
+    def init_params(self):
+        pass
+
+
 class NeuralSEDEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     pass
-
