@@ -22,6 +22,8 @@ kmeans1d = "*"
 livelossplot = "*"
 scikit-learn = "*"
 torch_geometric = "*"
+loss_landscapes = "*"
+seaborn = "*"
 
 [dev-packages]
 pytest = "*"

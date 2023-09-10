@@ -79,7 +79,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
 class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_eigs=5,
-                 spectral_op_type='Hamiltonian',
+                 spectral_op_type='Laplacian',
                  diagonal_scale: float = 1,
                  indicator_scale: float = 1):
         super().__init__()
@@ -102,7 +102,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def spectral_operator(self, A, w):
         v = 1 - self._indicator_scale * w
         E = A * (v - v.T) ** 2
-        if self._spectral_op_type == 'Hamiltonian':
+        if self._spectral_op_type == 'Laplacian':
             H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(v.squeeze())
         if self._spectral_op_type == 'Adjacency':
             H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
