@@ -6,8 +6,8 @@ from livelossplot import PlotLosses
 from torch import optim
 import numpy as np
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
-from subgraph_matching_via_nn.graph_metric_networks.graph_matric_nn import \
-    GraphMetricNetwork
+from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import \
+    EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import \
     BaseGraphProcessor, GraphProcessor
 from subgraph_matching_via_nn.utils.utils import uniform_dist
@@ -16,14 +16,13 @@ from subgraph_matching_via_nn.utils.utils import uniform_dist
 def nn_subgraph_localization(G: nx.graph,
                              G_sub: nx.graph,
                              composite_nn: CompositeNeuralNetwork,
-                             graph_metric_nn: GraphMetricNetwork,
+                             embedding_metric_nn: EmbeddingMetricNetwork,
                              params: dict,
                              graph_processor: Optional[BaseGraphProcessor] =
                              GraphProcessor(),
                              dtype=torch.double):
     # Create your optimizer
     lr = params['lr']
-    reg_term = params['reg_term']
     optimizer = optim.SGD(composite_nn.parameters(), lr=lr)
     x0 = params.get("x0", None)
     liveloss = PlotLosses(mode='notebook')
@@ -39,12 +38,13 @@ def nn_subgraph_localization(G: nx.graph,
     # Set the model to training mode
     composite_nn.train()
     for iteration in range(params["maxiter"]):  # TODO: add stopping condition
-        embeddings_full, w = composite_nn(A, x0)
-        loss = graph_metric_nn(embeddings_full=embeddings_full,
-                               embeddings_subgraph=embeddings_sub)  # + regularization
+        embeddings_full, w = composite_nn(A, x0, params)
+        loss = embedding_metric_nn(embeddings_full=embeddings_full,
+                                   embeddings_subgraph=embeddings_sub)  # + regularization
 
-        reg = reg_term(A, w, params)
-        full_loss = loss + params["reg_param"] * reg
+        reg = torch.stack([reg_param * reg_term(A, w, params) for reg_param, reg_term in
+                           zip(params["reg_params"], params["reg_terms"])]).sum()
+        full_loss = loss + reg
 
         optimizer.zero_grad()
         full_loss.backward()
@@ -58,24 +58,25 @@ def nn_subgraph_localization(G: nx.graph,
             liveloss.send()
 
 
-def edited_Laplacian(A, w):
-    A_edited = A - A * ((w - w.T) ** 2)
-    L = (torch.diag(A_edited.sum(axis=1)) - A_edited)
-    return L
+def edited_Laplacian(A, v):
+    E = A * (v - v.T) ** 2
+    A_edited = A - E
+    L_edited = torch.diag(A_edited.sum(axis=1)) - A_edited
+    return L_edited
 
 
 # regularization terms
 
 def spectral_reg(A, w, params):
-    L_edited = edited_Laplacian(A, w * (params["m"] ** 2))
-    reg = w.T @ L_edited @ w
+    L_edited = edited_Laplacian(A, 1 - w * (params["m"]))
+    reg = torch.norm(L_edited @ w, p=2) ** 2
     return reg
 
 
 def graph_total_variation(A, w, params):
     # todo: should check why it doesn't give 0 with gt mask
-    diff = torch.abs(torch.matmul(A, w))
-    total_variation = torch.sum(diff)
+    L = torch.diag(A.sum(dim=1)) - A
+    total_variation = (0.5 * w.T @ L @ w).squeeze()
     return total_variation
 
 

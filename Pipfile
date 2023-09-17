@@ -24,6 +24,7 @@ scikit-learn = "*"
 torch_geometric = "*"
 loss_landscapes = "*"
 seaborn = "*"
+torchsort = "*"
 
 [dev-packages]
 pytest = "*"

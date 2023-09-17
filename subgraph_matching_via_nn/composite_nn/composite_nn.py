@@ -17,23 +17,26 @@ class CompositeNeuralNetwork(nn.Module):
         self.node_classifier_network = node_classifier_network
         self.embedding_networks = embedding_networks
 
-    def forward(self, A, x=None):
+    def forward(self, A, x=None, params: dict = None):
         # compute node classifier
-        w = self.classify(A=A, x=x)
+        w = self.classify(A=A, x=x, params=params)
 
         # compute embedding
-        embeddings = self.embed(A=A, w=w)
+        embeddings = self.embed(A=A, w=w, params=params)
 
         return embeddings, w
 
-    def embed(self, A, w):
+    def embed(self, A, w, params: dict = None):
         embeddings = []
         for embedding_network in self.embedding_networks:
-            embeddings.append(embedding_network(A=A, w=w))
+            embeddings.append(embedding_network(A=A, w=w, params=params))
+            # TODO: apply mlp. for example
+            #  ||a(emb1-emb1_gt)||^2+||b(emb2-emb2_gt)||^2  s.t. (a^2+b^2)=1
+            #  total_emb = mlp(embeddings) - > ||total_emb - total_emb_gt||^2
         return embeddings
 
-    def classify(self, A, x):
-        w = self.node_classifier_network(A=A, x=x)
+    def classify(self, A, x, params: dict = None):
+        w = self.node_classifier_network(A=A, x=x, params=params)
         return w
 
     def init_params(self, **kwargs):

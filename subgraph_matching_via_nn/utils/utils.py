@@ -22,7 +22,7 @@ def plot_indicator(w_list, labels, ax):
     # Plotting the sorted tensors
     markers = ['o', 's', '^']  # List of markers for different tensors
     marker_sizes = [7, 5, 5]
-    colors = ['red', 'blue', 'green']  # List of colors for different tensors
+    colors = ['green', 'cyan', 'red']  # List of colors for different tensors
 
     # Plot each tensor with a different marker, color, and label
     for i, w in enumerate(sorted_w_list):

@@ -5,14 +5,14 @@ from torch import nn
 from torch.nn.modules.loss import _Loss
 
 
-class BaseGraphMetricNetwork(nn.Module):
-    def __init__(self, loss_fun):
+class BaseEmbeddingMetricNetwork(nn.Module):
+    def __init__(self, loss_fun: _Loss):
         super().__init__()
         self._loss_fun = loss_fun
 
 
-class GraphMetricNetwork(BaseGraphMetricNetwork):
-    def __init__(self, loss_fun : _Loss):
+class EmbeddingMetricNetwork(BaseEmbeddingMetricNetwork):
+    def __init__(self, loss_fun: _Loss):
         """
 
         :param loss_fun: a torch loss function
@@ -27,7 +27,7 @@ class GraphMetricNetwork(BaseGraphMetricNetwork):
         of the sub graph
         :return: loss between embeddings
         """
-        if  isinstance(embeddings_full, list):
+        if isinstance(embeddings_full, list):
             loss = 0.0
             for embedding_full, embedding_subgraph in zip(embeddings_full,
                                                           embeddings_subgraph):

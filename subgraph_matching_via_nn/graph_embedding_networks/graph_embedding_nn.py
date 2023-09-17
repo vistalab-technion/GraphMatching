@@ -1,12 +1,19 @@
+from abc import abstractmethod, ABC
+
 import torch
 from torch import nn, cat
 
 
-class BaseGraphEmbeddingNetwork(nn.Module):
+class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-    def forward(self, A, w):
+    def forward(self, A, w, params: dict = None):
+        pass
+
+    @property
+    @abstractmethod
+    def output_dim(self):
         pass
 
 
@@ -16,7 +23,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._moments_type = moments_type
         self._n_moments = n_moments
 
-    def forward(self, A, w):
+    def forward(self, A, w, params: dict = None):
         if self._moments_type == 'standardized_central':
             embedding = self.compute_standardized_central_moments(w, A, self._n_moments)
         elif self._moments_type == 'standardized_raw':
@@ -51,7 +58,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         if n_moments > 2:
             for k in range(1, n_moments + 1):
                 if k != 2:
-                    mom = w.T @ (((A @ w) / (var ** 0.5)) ** k)
+                    mom = (w.T @ (((A @ w) / (var ** 0.5)) ** k))
                     moments.append(mom)
         return cat(moments).squeeze()
 
@@ -76,23 +83,39 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def init_params(self):
         pass
 
+    @property
+    def output_dim(self):
+        if self._moments_type == 'standardized_central':
+            return self._n_moments-2
+        elif self._moments_type == 'standardized_raw':
+            return self._n_moments-1
+        elif self._moments_type == 'raw':
+            return self._n_moments
+        elif self._moments_type == 'central':
+            return self._n_moments - 1
+
 
 class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_eigs=5,
                  spectral_op_type='Laplacian',
                  diagonal_scale: float = 1,
-                 indicator_scale: float = 1):
+                 indicator_scale: float = 1,
+                 zero_eig_scale: float = 1):
         super().__init__()
         self._spectral_op_type = spectral_op_type
         self._n_eigs = n_eigs
         self._diagonal_scale = diagonal_scale
         self._indicator_scale = indicator_scale
+        self._zero_eig_scale = zero_eig_scale
 
-    def forward(self, A, w):
+    def forward(self, A, w, params: dict = None):
         H = self.spectral_operator(A, w)
         evals, _ = torch.linalg.eigh(H)
         embedding = evals[:self._n_eigs - 1]
-        return embedding
+
+        embedding_clone = embedding.clone()
+        embedding_clone[0] = self._zero_eig_scale * embedding[0]
+        return embedding_clone
 
     @staticmethod
     def laplacian(A):
@@ -101,15 +124,32 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
     def spectral_operator(self, A, w):
         v = 1 - self._indicator_scale * w
+
         E = A * (v - v.T) ** 2
+        # E = A * self.squared_distance_matrix_based_on_kernel(v)
         if self._spectral_op_type == 'Laplacian':
             H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(v.squeeze())
         if self._spectral_op_type == 'Adjacency':
             H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
         return H
 
+    @staticmethod
+    def squared_distance_matrix_based_on_kernel(v):
+        # Calculate the kernel K = w @ w.T via outer product
+        K = v @ v.T
+
+        # Extract diagonal elements of K
+        diag_K = torch.diag(K)
+        E = (diag_K[:, None] - 2 * K + diag_K[None, :])
+
+        return E
+
     def init_params(self):
         pass
+
+    @property
+    def output_dim(self):
+        return self._n_eigs
 
 
 class NeuralSEDEmbeddingNetwork(BaseGraphEmbeddingNetwork):
