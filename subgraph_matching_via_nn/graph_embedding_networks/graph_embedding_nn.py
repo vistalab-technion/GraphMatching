@@ -16,6 +16,11 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def output_dim(self):
         pass
 
+    @property
+    @abstractmethod
+    def embedding_type(self):
+        pass
+
 
 class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_moments, moments_type='standardized'):
@@ -86,13 +91,17 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     @property
     def output_dim(self):
         if self._moments_type == 'standardized_central':
-            return self._n_moments-2
+            return self._n_moments - 2
         elif self._moments_type == 'standardized_raw':
-            return self._n_moments-1
+            return self._n_moments - 1
         elif self._moments_type == 'raw':
             return self._n_moments
         elif self._moments_type == 'central':
             return self._n_moments - 1
+
+    @property
+    def embedding_type(self):
+        return f"{self._moments_type} moments"
 
 
 class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
@@ -150,6 +159,10 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     @property
     def output_dim(self):
         return self._n_eigs
+
+    @property
+    def embedding_type(self):
+        return f"{self._spectral_op_type} eigs"
 
 
 class NeuralSEDEmbeddingNetwork(BaseGraphEmbeddingNetwork):

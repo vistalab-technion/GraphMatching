@@ -154,13 +154,16 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
     # TODO: instead of passing both edge_indicator and node_indicator, infer it from
     #  the data_type
     # Define the colors for the colormap
-    colors = ['red', 'yellow', 'green']  # Red to Green
+    colors = ['red', 'blue', 'green']  # Red to Green
     cmap = mcolors.LinearSegmentedColormap.from_list('my_cmap', colors)
 
     # infer if this a node indicator or an edge indicator
     if type(distribution) is np.ndarray:
         # Normalize w to match the colormap range
-        norm = mcolors.Normalize(vmin=min(distribution), vmax=max(distribution))
+        if min(distribution) == max(distribution):
+            norm = mcolors.Normalize(vmin=0, vmax=max(distribution))
+        else:
+            norm = mcolors.Normalize(vmin=min(distribution), vmax=max(distribution))
 
         # Generate a list of colors for nodes based on w values
         node_probabilities = norm(distribution)
@@ -170,8 +173,12 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
                               G.edges()]
     elif type(distribution) is dict:
         edge_indicator = distribution
-        norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
-                                 vmax=max(edge_indicator.values()))
+        if min(edge_indicator.values()) == max(edge_indicator.values()):
+            norm = mcolors.Normalize(vmin=0,
+                                     vmax=max(edge_indicator.values()))
+        else:
+            norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
+                                     vmax=max(edge_indicator.values()))
         edge_probabilities = [norm(edge_indicator[(u, v)]) for u, v in
                               G.edges()]
         node_probabilities = norm(node_indicator_from_edge_indicator(G=G,
@@ -186,8 +193,7 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
         edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
                               G.edges()]
     else:
-        raise("Only NumPy array or a dictionary are supported.")
-
+        raise ("Only NumPy array or a dictionary are supported.")
 
     # if edge_indicator is not None:
     #     norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
