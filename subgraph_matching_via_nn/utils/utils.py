@@ -13,7 +13,9 @@ TORCH_DTYPE = torch.float64
 NP_DTYPE = np.float64
 
 
-def plot_indicator(w_list, labels, ax):
+def plot_indicator(w_list, labels):
+    fig, ax = plt.subplots(1, 1, figsize=[18, 4])
+
     # Sort the flattened array independently
     idx = np.argsort(w_list[0], axis=0)
     sorted_w_list = [w[idx].squeeze(-1) for w in w_list]
@@ -141,7 +143,7 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
 
     :param G: graph
     :param G_sub: sub_graph of G
-    :param distribution: either a node distribution (numpy array) or and edge
+    :param distribution: either a node distribution (numpy array) or an edge
     distribution
     (dict of {edge tuple : distribution value})
     :param title: title for the plot
@@ -248,3 +250,8 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
     ax.set_title(title)
+
+
+def get_graph_adj_mat_as_tensor(g: nx.graph):
+    # return torch.from_numpy(nx.to_numpy_array(g)).type(TORCH_DTYPE)
+    return torch.from_numpy((nx.adjacency_matrix(g)).toarray()).type(TORCH_DTYPE)

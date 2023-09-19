@@ -1,18 +1,15 @@
 from logging import exception
-from typing import Optional
-
-import kmeans1d
 import networkx as nx
 import numpy as np
 
-from subgraph_matching_via_nn.utils.utils import NP_DTYPE
+from subgraph_matching_via_nn.data.sub_graph import SubGraph
 
 
 class BaseGraphProcessor:
     def __init__(self):
         super().__init__()
 
-    def pre_process(self, graph, w):
+    def pre_process(self, sub_graph: SubGraph):
         pass
 
     def post_process(self, graph, w):
@@ -26,37 +23,29 @@ class GraphProcessor(BaseGraphProcessor):
         self._to_line = params.get("to_line", None)
         self._to_undirected = params.get("to_undirected", None)
 
-    def pre_process(self, graph: nx.Graph, edge_indicator=None, node_indicator=None):
+    def pre_process(self, sub_graph: SubGraph):
+        processed_G = sub_graph.G
+        edge_indicator = sub_graph.edge_indicator
+        node_indicator = sub_graph.node_indicator
+        is_line_graph = False
+
         # performing a sequence of operations on the graph as a pre-process
         if self._to_undirected is not None:
             if self._to_undirected == 'symmetrize':
-                graph = nx.to_undirected(graph)
+                processed_G = nx.to_undirected(processed_G)
             else:
                 raise exception(f"{self._to_undirected} not supported yet")
         if self._to_line:
-            graph = nx.line_graph(graph)
+            is_line_graph = True
+            processed_G = nx.line_graph(processed_G)
             if edge_indicator is not None:
                 node_indicator = np.array([edge_indicator[edge] for edge in
-                                           graph.nodes()])
+                                           processed_G.nodes()])
 
         if edge_indicator is not None:
-            return graph, node_indicator
+            G_sub_as_sub_graph = SubGraph(sub_graph.G_sub, None, None, None)
+            processed_G_sub = self.pre_process(G_sub_as_sub_graph)
+            sub_graph = SubGraph(processed_G, processed_G_sub, node_indicator, edge_indicator, is_line_graph=is_line_graph)
+            return sub_graph
         else:
-            return graph
-
-    @staticmethod
-    def binarize(graph: nx.graph, w: np.array, params, type='top_m'):
-        if type == 'k_means':
-            w_th, centroids = kmeans1d.cluster(w, k=2)
-            w_th = np.array(w_th)[:, None]
-        elif type == 'top_m':
-            indices_of_top_m = np.argsort(w, axis=0)[-params["m"]:]  # top m
-            w_th = np.zeros_like(w, dtype=NP_DTYPE)
-            w_th[indices_of_top_m] = 1
-        elif type == 'quantile':
-            w_th = (w > np.quantile(w, params["quantile_level"]))
-            w_th = np.array(w_th, dtype=np.float64)
-        w_th = w_th / w_th.sum()
-        w_th_dict = dict(zip(graph.nodes(), w_th))
-
-        return w_th_dict
+            return processed_G
