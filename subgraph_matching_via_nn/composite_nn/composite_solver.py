@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Tuple, List
 import networkx as nx
 import numpy as np
 import torch
-from torch import optim
+from torch import optim, nn
 from livelossplot import PlotLosses
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
@@ -12,10 +12,11 @@ from subgraph_matching_via_nn.mask_binarization.indicator_dsitribution_binarizer
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE, uniform_dist
 
 
-class BaseCompositeSolver:
+class BaseCompositeSolver(nn.Module):
 
     def __init__(self, composite_nn: CompositeNeuralNetwork, embedding_metric_nn: EmbeddingMetricNetwork,
                  graph_processor: Optional[BaseGraphProcessor] = GraphProcessor(), params: dict = {}):
+        super().__init__()
         self.composite_nn = composite_nn
         self.embedding_metric_nn = embedding_metric_nn
         self.graph_processor = graph_processor
@@ -66,12 +67,19 @@ class BaseCompositeSolver:
 
         print(f"init loss (no reg): {loss}")  # without regularization
 
-        reg = torch.stack([reg_param * reg_term(A_full_processed, w, self.params) for reg_param, reg_term in
-                           zip(self.params["reg_params"], self.params["reg_terms"])]).sum()
+        reg = self._get_reg_loss(A_full_processed, w)
         full_loss = loss + reg
         print(f"init full loss (with reg): {full_loss}")  # with regularization
 
         return loss, ref_loss
+
+    def _get_reg_loss(self, A_full_processed, w):
+        reg_terms_list = [reg_param * reg_term(A_full_processed, w, self.params) for reg_param, reg_term in
+                           zip(self.params["reg_params"], self.params["reg_terms"])]
+
+        if len(reg_terms_list) == 0:
+            return 0
+        return torch.stack(reg_terms_list).sum()
 
     def get_composite_loss_terms(self, A, embeddings_sub):
         x0 = self.params.get("x0", None)
@@ -80,8 +88,7 @@ class BaseCompositeSolver:
         loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
                                         embeddings_subgraph=embeddings_sub)
 
-        reg = torch.stack([reg_param * reg_term(A, w, self.params) for reg_param, reg_term in
-                           zip(self.params["reg_params"], self.params["reg_terms"])]).sum()
+        reg = self._get_reg_loss(A, w)
         return loss, reg
 
     def __log_loss(self, iteration, loss, reg):
@@ -107,6 +114,24 @@ class BaseCompositeSolver:
         A_sub = sub_graph.A_sub
 
         return A, A_sub
+
+    def forward(self, input_graphs):
+        """
+        input_graphs (List[Tuple[nx.graph, nx.graph]])
+        """
+        #TODO: optimize with batching
+        graphs_distances_list = []
+        for G, G_sub in input_graphs:
+            graphs_distance = self.get_loss_for_graph_and_subgraph(G, G_sub)
+            graphs_distances_list.append(graphs_distance)
+        return torch.stack(graphs_distances_list).unsqueeze(1)
+
+    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
+        A, A_sub = self.__pre_process_graphs(G, G_sub)
+        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
+                                                 w=uniform_dist(A_sub.shape[0]).detach())
+        loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
+        return loss + reg
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
         A, A_sub = self.__pre_process_graphs(G, G_sub)
