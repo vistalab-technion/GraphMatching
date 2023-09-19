@@ -126,6 +126,9 @@ class BaseCompositeSolver:
 
             self.__log_loss(iteration, loss, reg)
 
+        w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().numpy()
+        return w_star
+
     def set_initial_params_based_on_previous_optimum(self, w_star):
         # binarized_w_star = IndicatorDistributionBinarizer.binarize(processed_G, w_star, self.params,
         #                                  binarization_type)
