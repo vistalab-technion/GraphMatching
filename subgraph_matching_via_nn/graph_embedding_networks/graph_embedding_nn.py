@@ -119,7 +119,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
     def forward(self, A, w, params: dict = None):
         H = self.spectral_operator(A, w)
-        evals, _ = torch.linalg.eigh(H)
+        evals, evecs = torch.linalg.eigh(H)
         embedding = evals[:self._n_eigs - 1]
 
         embedding_clone = embedding.clone()
@@ -133,14 +133,26 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
     def spectral_operator(self, A, w):
         v = 1 - self._indicator_scale * w
-
         E = A * (v - v.T) ** 2
         # E = A * self.squared_distance_matrix_based_on_kernel(v)
         if self._spectral_op_type == 'Laplacian':
             H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(v.squeeze())
         if self._spectral_op_type == 'Adjacency':
             H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
+
         return H
+
+    # def spectral_operator(self, A, w):
+    #     for i in range(10):
+    #         v = 1 - self._indicator_scale * w
+    #         E = A * (v - v.T) ** 2
+    #         # E = A * self.squared_distance_matrix_based_on_kernel(v)
+    #         H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(
+    #             v.squeeze())
+    #         evals, evecs = torch.linalg.eigh(H)
+    #         w = w - evecs[:, 1:] @ evecs[:, 1:].T @ w
+    #         w = w/w.sum()
+    #     return H
 
     @staticmethod
     def squared_distance_matrix_based_on_kernel(v):

@@ -68,7 +68,8 @@ def edited_Laplacian(A, v):
 # regularization terms
 
 def spectral_reg(A, w, params):
-    L_edited = edited_Laplacian(A, 1 - w * (params["m"]))
+    v = 1 - w * (params["m"])
+    L_edited = edited_Laplacian(A, v)
     reg = torch.norm(L_edited @ w, p=2) ** 2
     return reg
 

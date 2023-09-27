@@ -100,12 +100,12 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, input_dim, hidden_dim, num_classes, classification_layer):
+    def __init__(self, input_dim, hidden_dim, output_dim, classification_layer):
         super(GCNNodeClassifierNetwork, self).__init__(
             classification_layer=classification_layer)
         self.conv1 = GCNConv(input_dim, hidden_dim, dtype=TORCH_DTYPE)
-        self.conv2 = GCNConv(hidden_dim, num_classes, dtype=TORCH_DTYPE)
-        self.skip_connection = nn.Identity(input_dim, num_classes,
+        self.conv2 = GCNConv(hidden_dim, output_dim, dtype=TORCH_DTYPE)
+        self.skip_connection = nn.Identity(input_dim, output_dim,
                                            dtype=torch.float)  # Skip connection
         # self.register_buffer('uniform_feature', torch.ones(1, input_dim))
 

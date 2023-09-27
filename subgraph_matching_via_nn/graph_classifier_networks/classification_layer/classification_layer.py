@@ -12,6 +12,16 @@ class BaseClassificationLayer(nn.Module):
         pass
 
 
+class IdentityClassificationLayer(BaseClassificationLayer):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, A, x):
+        return x
+
+
+
 class SigmoidClassificationLayer(BaseClassificationLayer):
 
     def __init__(self, default_temp: float = 1.0,
