@@ -33,8 +33,12 @@ class LocalizationResult:
     w_all: List[torch.tensor]
     w_star: torch.tensor
     params: dict
+    solver: BaseCompositeSolver
 
 class LocalizationBinarizationSimulator:
+    seed = 10  # for plotting
+    SOLVER_MODEL_DUMP_FILE_NAME = "solver.p"
+    LOCALIZATION_OBJECT_DUMP_FILE_NAME = "localization.p"
 
     def __init__(self, n_graph, n_subgraph, to_line=True):
         # n_graph: Number of nodes in the graph (for random graph)
@@ -43,14 +47,13 @@ class LocalizationBinarizationSimulator:
         self.n_graph = n_graph
         self.n_subgraph = n_subgraph
 
-        seed = 10  # for plotting
-        self.plot_services = PlotServices(seed)
+        self.plot_services = PlotServices(LocalizationBinarizationSimulator.seed)
 
         self.to_line = True
         self.graph_processor = GraphProcessor(params={'to_line': to_line})
 
         params = {}
-        params["maxiter"] = 5000
+        params["maxiter"] = 2000
         params["lr"] = 0.0000002  # 0.0002 is good
         params["n_moments"] = 4
         params["k_update_plot"] = 250
@@ -106,11 +109,9 @@ class LocalizationBinarizationSimulator:
 
         return w_all
 
-    def save_localization_results(self, sub_graph, processed_sub_graph, w_all, output_path):
+    def save_localization_results(self, sub_graph, processed_sub_graph, w_all, w_init, output_dir_path, output_path):
         gt_indicator = sub_graph.edge_indicator if self.to_line else sub_graph.node_indicator
         gt_indicator_tensor = self.composite_nn.init_network_with_indicator(processed_sub_graph)
-        w_init = self.node_classifier_network(A=processed_sub_graph.A_full,
-                                                      params=self.params).detach().numpy()
         w_star = self.node_classifier_network(A = processed_sub_graph.A_full, params = self.params).detach().numpy()
 
         localization_result = LocalizationResult()
@@ -123,19 +124,38 @@ class LocalizationBinarizationSimulator:
         localization_result.w_star = w_star
         localization_result.params = self.params
 
+        solver_file_path = f"{output_dir_path}{os.sep}{LocalizationBinarizationSimulator.SOLVER_MODEL_DUMP_FILE_NAME}"
+        torch.save(self.composite_solver.state_dict(), solver_file_path)
+        with open(solver_file_path, 'rb') as f:
+            pass
+
         with open(output_path, 'wb') as f:
             pickle.dump(localization_result, f)
 
     @staticmethod
-    def load_localization_results(results_output_folder_path)-> List[LocalizationResult]:
+    def load_localization_results(results_output_folder_path) -> List[LocalizationResult]:
         localization_results = []
 
         directory = os.fsencode(results_output_folder_path)
 
         for file in os.listdir(directory):
+            # treat file as directory, and look for two files (by name)
             filename = os.fsdecode(file)
-            file = open(f"{results_output_folder_path}{os.sep}{filename}", 'rb')
-            localization_result = pickle.load(file)
+            base_localization_result_dir = f"{results_output_folder_path}{os.sep}{filename}"
+
+            with open(f"{base_localization_result_dir}{os.sep}{LocalizationBinarizationSimulator.LOCALIZATION_OBJECT_DUMP_FILE_NAME}", 'rb') as f:
+                localization_result = pickle.load(f)
+
+            sub_graph = localization_result.sub_graph
+            simulator = LocalizationBinarizationSimulator(n_graph=len(sub_graph.G.nodes), n_subgraph=len(sub_graph.G_sub.nodes), to_line= localization_result.processed_sub_graph.is_line_graph)
+            simulator.build_localization_model(localization_result.processed_sub_graph.G, localization_result.sub_graph, localization_result.params)
+            model = simulator.composite_solver
+
+            model.load_state_dict(torch.load(
+                f"{base_localization_result_dir}{os.sep}{LocalizationBinarizationSimulator.SOLVER_MODEL_DUMP_FILE_NAME}",
+                map_location=torch.device('cpu')))
+
+            localization_result.solver = model
             localization_results.append(localization_result)
 
         return localization_results
@@ -146,14 +166,20 @@ class LocalizationBinarizationSimulator:
             sub_graph, processed_sub_graph = self.draw_sub_graph()
 
             self.build_localization_model(processed_sub_graph.G, sub_graph, self.params)
+            w_init = self.node_classifier_network(A=processed_sub_graph.A_full,
+                                                  params=self.params).detach().numpy()
 
             w_all = self.run_localization(sub_graph, processed_sub_graph)
 
             if results_output_path is not None:
                 if not os.path.isdir(results_output_path):
                     os.makedirs(results_output_path)
-                localization_output_path = f"{results_output_path}{os.sep}{k}.p"
-                self.save_localization_results(sub_graph, processed_sub_graph, w_all, localization_output_path)
+                results_output_path = f"{results_output_path}{os.sep}{k}"
+                if not os.path.isdir(results_output_path):
+                    os.makedirs(results_output_path)
+
+                localization_output_path = f"{results_output_path}{os.sep}{LocalizationBinarizationSimulator.LOCALIZATION_OBJECT_DUMP_FILE_NAME}"
+                self.save_localization_results(sub_graph, processed_sub_graph, w_all, w_init, results_output_path, localization_output_path)
 
     @staticmethod
     def apply_performance_metrics(gt_w, all_binarized_indicators_map, performance_metric_name_to_func_map):
@@ -168,33 +194,34 @@ class LocalizationBinarizationSimulator:
                 print(f"{indicator_name}: {metric_func(binary_gt_w, binary_estimated_w)}")
                 print()
 
-    def apply_binarization_scheme(self, processed_sub_graph, sub_graph, w_all, series_binarization_type: IndicatorBinarizationBootType, element_binarization_type: IndicatorBinarizationType, params):
-        self.build_localization_model(processed_sub_graph.G, sub_graph, params)
+    @staticmethod
+    def apply_binarization_scheme(solver: BaseCompositeSolver, processed_sub_graph, sub_graph, w_all, series_binarization_type: IndicatorBinarizationBootType, element_binarization_type: IndicatorBinarizationType, params):
         processed_G = processed_sub_graph.G
 
-        w_star = self.node_classifier_network(A = processed_sub_graph.A_full, params = params).detach().numpy()
+        w_star = solver.composite_nn.node_classifier_network(A = processed_sub_graph.A_full, params = params).detach().numpy()
         w_star_dict = dict(zip(processed_G.nodes(), w_star))
 
         w_bin_dict = IndicatorDistributionBinarizer.from_indicators_series_to_binary_indicator(processed_G, w_all, w_star, params, series_binarization_type, element_binarization_type)
         return {"w_star": w_star_dict, "binarized" : w_bin_dict}
 
-    def show_localization_results(self, processed_sub_graph, sub_graph, indicator_name_to_dict_map, params, embedding_idx=1):
+    @staticmethod
+    def show_localization_results(solver: BaseCompositeSolver, processed_sub_graph: SubGraph, sub_graph: SubGraph, indicator_name_to_dict_map, params, embedding_idx=1):
         # embedding_idx = 1 # to choose which embedding to plot
         # indicator_name_to_object_map = {'w_star': w_star_dict, 'w_bin': w_bin_dict, 'w_boot_bin': w_boot_dict_bin, 'w_bin_boot': w_binarize_boot_dict}
 
-        self.build_localization_model(processed_sub_graph.G, sub_graph, params)
-
-        self.plot_services.plot_subgraph_indicators(sub_graph.G, sub_graph.G_sub, self.to_line, indicator_name_to_dict_map)
+        to_line = processed_sub_graph.is_line_graph
+        plot_services = PlotServices(LocalizationBinarizationSimulator.seed)
+        plot_services.plot_subgraph_indicators(sub_graph.G, sub_graph.G_sub, to_line, indicator_name_to_dict_map)
 
         gt_node_distribution_processed = processed_sub_graph.w_gt
-        loss, ref_loss = self.composite_solver.compare(processed_sub_graph.A_full, processed_sub_graph.A_sub, gt_node_distribution_processed, A_sub_indicator=None)
+        loss, ref_loss = solver.compare(processed_sub_graph.A_full, processed_sub_graph.A_sub, gt_node_distribution_processed, A_sub_indicator=None)
 
         indicator_name_to_vector_map = {indicator_name: list(indicator_dict.values()) for indicator_name, indicator_dict in indicator_name_to_dict_map.items()}
-        self.composite_solver.compare_indicators(processed_sub_graph.A_full, indicator_name_to_vector_map, embedding_idx)
+        solver.compare_indicators(processed_sub_graph.A_full, indicator_name_to_vector_map, embedding_idx)
 
         reg_terms_names = [reg_terms.__name__ for reg_terms in params['reg_terms']]
 
-        print(f"\n{self.to_line = }")
+        print(f"\n{to_line = }")
         print(f"\nloss = {loss}, reg_params = {params['reg_params']}, reg_terms = {reg_terms_names}")
         print(f"loss_ref = {ref_loss}, reg_param = {params['reg_params']}, reg_terms = {reg_terms_names}")
         print(f"\nRemark: embeddings_gt and embeddings_sub might differ if we don't transform to line graph because node indicator can at best give a superset of the edges of the subgraph.")
