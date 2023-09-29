@@ -127,7 +127,10 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
                           G.neighbors(node)]
 
         # Calculate average of edge_indicator values for the incident edges
-        avg_value = max([edge_indicator[edge] for edge in incident_edges])
+        edge_indicator_values = [edge_indicator[edge] for edge in incident_edges]
+        avg_value = 0
+        if len(edge_indicator_values) != 0:
+            avg_value = max(edge_indicator_values)
 
         w[list(G.nodes).index(node)] = float(avg_value)
     return w
