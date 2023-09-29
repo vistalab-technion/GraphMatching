@@ -160,7 +160,7 @@ class LocalizationBinarizationSimulator:
 
         return localization_results
 
-    def run_simulation(self, num_localizations, results_output_path=None):
+    def run_simulation(self, num_localizations, root_results_output_path=None):
 
         for k in range(num_localizations):
             sub_graph, processed_sub_graph = self.draw_sub_graph()
@@ -171,10 +171,10 @@ class LocalizationBinarizationSimulator:
 
             w_all = self.run_localization(sub_graph, processed_sub_graph)
 
-            if results_output_path is not None:
-                if not os.path.isdir(results_output_path):
-                    os.makedirs(results_output_path)
-                results_output_path = f"{results_output_path}{os.sep}{k}"
+            if root_results_output_path is not None:
+                if not os.path.isdir(root_results_output_path):
+                    os.makedirs(root_results_output_path)
+                results_output_path = f"{root_results_output_path}{os.sep}{k}"
                 if not os.path.isdir(results_output_path):
                     os.makedirs(results_output_path)
 
