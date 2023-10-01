@@ -3,6 +3,8 @@ from abc import abstractmethod, ABC
 import torch
 from torch import nn, cat
 
+from subgraph_matching_via_nn.utils.graph_utils import hamiltonian, graph_edit_matrix
+
 
 class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
@@ -120,50 +122,26 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def forward(self, A, w, params: dict = None):
         H = self.spectral_operator(A, w)
         evals, evecs = torch.linalg.eigh(H)
-        embedding = evals[:self._n_eigs - 1]
+        embedding = evals[:self._n_eigs]
 
         embedding_clone = embedding.clone()
         embedding_clone[0] = self._zero_eig_scale * embedding[0]
         return embedding_clone
 
-    @staticmethod
-    def laplacian(A):
-        L = torch.diag(A.sum(dim=1)) - A
-        return L
-
     def spectral_operator(self, A, w):
         v = 1 - self._indicator_scale * w
-        E = A * (v - v.T) ** 2
-        # E = A * self.squared_distance_matrix_based_on_kernel(v)
+
         if self._spectral_op_type == 'Laplacian':
-            H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(v.squeeze())
+            H = hamiltonian(A, v, self._diagonal_scale)
         if self._spectral_op_type == 'Adjacency':
+            E = graph_edit_matrix(A, v)
             H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
-
+        if self._spectral_op_type == 'SquaredProjectedHamiltonian':
+            H_unprojected = hamiltonian(A, v, self._diagonal_scale)
+            x = w / w.norm()
+            H_projected = H_unprojected @ (torch.eye(H_unprojected.shape[0]) - x @ x.T)
+            H = H_projected.T @ H_projected
         return H
-
-    # def spectral_operator(self, A, w):
-    #     for i in range(10):
-    #         v = 1 - self._indicator_scale * w
-    #         E = A * (v - v.T) ** 2
-    #         # E = A * self.squared_distance_matrix_based_on_kernel(v)
-    #         H = self.laplacian(A - E) + self._diagonal_scale * torch.diag(
-    #             v.squeeze())
-    #         evals, evecs = torch.linalg.eigh(H)
-    #         w = w - evecs[:, 1:] @ evecs[:, 1:].T @ w
-    #         w = w/w.sum()
-    #     return H
-
-    @staticmethod
-    def squared_distance_matrix_based_on_kernel(v):
-        # Calculate the kernel K = w @ w.T via outer product
-        K = v @ v.T
-
-        # Extract diagonal elements of K
-        diag_K = torch.diag(K)
-        E = (diag_K[:, None] - 2 * K + diag_K[None, :])
-
-        return E
 
     def init_params(self):
         pass

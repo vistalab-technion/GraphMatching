@@ -5,11 +5,14 @@ import torch
 from livelossplot import PlotLosses
 from torch import optim
 import numpy as np
+from tqdm import tqdm
+
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import \
     EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import \
     BaseGraphProcessor, GraphProcessor
+from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix, laplacian
 from subgraph_matching_via_nn.utils.utils import uniform_dist
 
 
@@ -37,7 +40,8 @@ def nn_subgraph_localization(G: nx.graph,
 
     # Set the model to training mode
     composite_nn.train()
-    for iteration in range(params["maxiter"]):  # TODO: add stopping condition
+
+    for iteration in tqdm(range(params["maxiter"])):  # TODO: add stopping condition
         embeddings_full, w = composite_nn(A, x0, params)
         loss = embedding_metric_nn(embeddings_full=embeddings_full,
                                    embeddings_subgraph=embeddings_sub)  # + regularization
@@ -51,26 +55,21 @@ def nn_subgraph_localization(G: nx.graph,
         optimizer.step()
 
         if iteration % params['k_update_plot'] == 0:
-            print(f"Iteration {iteration}, Loss: {loss.item()}")
-            print(f"Iteration {iteration}, Reg: {reg.item()}")
-            print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
             liveloss.update({'loss': loss.item()})
             liveloss.send()
 
-
-def edited_Laplacian(A, v):
-    E = A * (v - v.T) ** 2
-    A_edited = A - E
-    L_edited = torch.diag(A_edited.sum(axis=1)) - A_edited
-    return L_edited
+    print(f"Iteration {iteration}, Loss: {loss.item()}")
+    print(f"Iteration {iteration}, Reg: {reg.item()}")
+    print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
 
 
 # regularization terms
 
 def spectral_reg(A, w, params):
     v = 1 - w * (params["m"])
-    L_edited = edited_Laplacian(A, v)
-    reg = torch.norm(L_edited @ w, p=2) ** 2
+    E = graph_edit_matrix(A, v)
+    L_edited = laplacian(A - E)
+    reg = torch.norm(L_edited @ v, p=2) ** 2
     return reg
 
 

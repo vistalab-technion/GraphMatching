@@ -131,7 +131,7 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
     return w
 
 
-def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
+def plot_graph_with_colors(G: nx.graph,
                            distribution: Union[dict, np.ndarray] = None,
                            title: str = '',
                            ax=None,
@@ -186,44 +186,17 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
     elif distribution is None:
         # Generate a list of colors for nodes, red for subgraph nodes and green
         # for the rest
-        node_probabilities = [1.0 if node in G_sub.nodes() else 0.0 for node in
-                              G.nodes()]
+        node_probabilities = [1.0 for node in G.nodes()]
+        edge_probabilities = [1.0 for edge in G.edges()]
+
+        # node_probabilities = [1.0 if node in G.nodes() else 0.0 for node in
+        #                       G.nodes()]
         # Generate a list of colors for edges, red for subgraph edges and green
         # for the rest
-        edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
-                              G.edges()]
+        # edge_probabilities = [1.0 if edge in G.edges() else 0.0 for edge in
+        #                       G.edges()]
     else:
         raise ("Only NumPy array or a dictionary are supported.")
-
-    # if edge_indicator is not None:
-    #     norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
-    #                              vmax=max(edge_indicator.values()))
-    #     edge_probabilities = [norm(edge_indicator[(u, v)]) for u, v in
-    #                           G.edges()]
-    #     node_probabilities = norm(node_indicator_from_edge_indicator(G=G,
-    #                                                                  edge_indicator=edge_indicator))
-    # else:
-    #     if node_indicator is not None:
-    #         # Normalize w to match the colormap range
-    #         norm = mcolors.Normalize(vmin=min(node_indicator), vmax=max(node_indicator))
-    #
-    #         # Generate a list of colors for nodes based on w values
-    #         node_probabilities = norm(node_indicator)
-    #         edge_probabilities = [norm((node_indicator[list(G.nodes).index(u)] +
-    #                                     node_indicator[list(G.nodes).index(v)]) / 2.0)
-    #                               for u, v in
-    #                               G.edges()]
-    #
-    #     else:
-    #
-    #         # Generate a list of colors for nodes, red for subgraph nodes and green
-    #         # for the rest
-    #         node_probabilities = [1.0 if node in G_sub.nodes() else 0.0 for node in
-    #                               G.nodes()]
-    #         # Generate a list of colors for edges, red for subgraph edges and green
-    #         # for the rest
-    #         edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
-    #                               G.edges()]
 
     node_colors = cmap(node_probabilities)
     edge_colors = cmap(edge_probabilities)
@@ -248,3 +221,4 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
     ax.set_title(title)
+
