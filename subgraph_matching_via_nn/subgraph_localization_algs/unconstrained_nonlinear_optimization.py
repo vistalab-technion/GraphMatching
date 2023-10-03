@@ -12,7 +12,8 @@ from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import \
     EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import \
     BaseGraphProcessor, GraphProcessor
-from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix, laplacian
+from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix, laplacian, \
+    hamiltonian
 from subgraph_matching_via_nn.utils.utils import uniform_dist
 
 
@@ -26,7 +27,6 @@ def nn_subgraph_localization(G: nx.graph,
                              dtype=torch.double):
     # Create your optimizer
     lr = params['lr']
-    optimizer = optim.SGD(composite_nn.parameters(), lr=lr)
     x0 = params.get("x0", None)
     liveloss = PlotLosses(mode='notebook')
 
@@ -41,26 +41,57 @@ def nn_subgraph_localization(G: nx.graph,
     # Set the model to training mode
     composite_nn.train()
 
-    for iteration in tqdm(range(params["maxiter"])):  # TODO: add stopping condition
+    # set solver
+    solver_type = params.get("solver_type", None)
+    if solver_type == 'gd':
+        optimizer = optim.SGD(params=composite_nn.parameters(), lr=lr)
+    elif solver_type == 'lbfgs':
+        optimizer = optim.LBFGS(params=composite_nn.parameters(), lr=lr, max_iter=5,
+                                max_eval=None,
+                                tolerance_grad=1e-07,
+                                tolerance_change=1e-09,
+                                history_size=10,
+                                line_search_fn=None)
+    else:
+        raise ValueError(f"Unknown optimizer choice: {solver_type}")
+
+    def evaluate_objective(A, x0, composite_nn, embedding_metric_nn, params):
         embeddings_full, w = composite_nn(A, x0, params)
-        loss = embedding_metric_nn(embeddings_full=embeddings_full,
-                                   embeddings_subgraph=embeddings_sub)  # + regularization
+        data_term = embedding_metric_nn(embeddings_full=embeddings_full,
+                                        embeddings_subgraph=embeddings_sub)  # + regularization
 
-        reg = torch.stack([reg_param * reg_term(A, w, params) for reg_param, reg_term in
-                           zip(params["reg_params"], params["reg_terms"])]).sum()
-        full_loss = loss + reg
+        reg_term = torch.stack(
+            [reg_param * reg_term(A, w, params) for reg_param, reg_term in
+             zip(params["reg_params"], params["reg_terms"])]).sum()
+        loss = data_term + reg_term
+        return loss, data_term, reg_term
 
-        optimizer.zero_grad()
-        full_loss.backward()
-        optimizer.step()
+    def closure():
+        optimizer.zero_grad()  # Zero out the previous gradient
+        loss, _, _ = evaluate_objective(A, x0, composite_nn, embedding_metric_nn,
+                                        params)
+        loss.backward()
+        return loss
 
+    # run iterations
+    for iteration in tqdm(range(params["maxiter"])):  # TODO: add stopping condition
+        optimizer.step(closure)
         if iteration % params['k_update_plot'] == 0:
-            liveloss.update({'loss': loss.item()})
-            liveloss.send()
+            with torch.no_grad():
+                loss, _, _ = evaluate_objective(A, x0, composite_nn,
+                                                embedding_metric_nn,
+                                                params)
+                liveloss.update({'loss': loss.item()})
+                liveloss.send()
 
-    print(f"Iteration {iteration}, Loss: {loss.item()}")
-    print(f"Iteration {iteration}, Reg: {reg.item()}")
-    print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
+    # print final loss
+    with torch.no_grad():
+        loss, data_term, reg_term = evaluate_objective(A, x0, composite_nn,
+                                                       embedding_metric_nn,
+                                                       params)
+        print(f"Iteration {iteration}, Data: {data_term.item()}")
+        print(f"Iteration {iteration}, Reg: {reg_term.item()}")
+        print(f"Iteration {iteration}, Data + rho * Reg: {loss.item()}")
 
 
 # regularization terms
@@ -89,3 +120,14 @@ def binary_penalty(A, w, params):
     # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
     reg = torch.sum(w * (1 / params["m"] - w) ** 2)
     return reg
+
+
+def log_barrier_penalty(A, w, params):
+    v = 1 - w * (params["m"])
+    evals, evecs = torch.linalg.eigh(hamiltonian(A, v, params["diagonal_scale"]))
+    lambda_second = evals[1]
+    c = params['second_eig']
+    if lambda_second <= c:
+        return torch.inf  # or some large value to signify the penalty
+    else:
+        return -torch.log(lambda_second - params['second_eig'])

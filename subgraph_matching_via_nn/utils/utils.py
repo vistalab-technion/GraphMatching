@@ -9,6 +9,9 @@ import numpy as np
 from scipy.stats import norm
 import seaborn as sns
 
+from subgraph_matching_via_nn.utils.graph_utils import \
+    node_indicator_from_edge_indicator
+
 TORCH_DTYPE = torch.float64
 NP_DTYPE = np.float64
 
@@ -49,7 +52,10 @@ def plot_degree_distribution(graph, n_moments=4, ax=None):
     # Fit a distribution to the data
     mu, std = norm.fit(degree_sequence)
     x = np.linspace(min(degree_sequence), max(degree_sequence), 100)
-    y = norm.pdf(x, mu, std)
+    if not np.all(x == x[0]):
+        y = norm.pdf(x, mu, std)
+    else:
+        y = np.ones_like(x)
     sns.lineplot(x=x, y=y, color='red', label='Fitted Normal Distribution', ax=ax)
 
     # Plot the KDE
@@ -69,66 +75,16 @@ def plot_degree_distribution(graph, n_moments=4, ax=None):
     return moments
 
 
+def top_m(w, m):
+    indices_of_top_m = np.argsort(w, axis=0)[-m:]  # top m
+    w_th = np.zeros_like(w, dtype=NP_DTYPE)
+    w_th[indices_of_top_m] = 1
+    return w_th
+
+
 def uniform_dist(n):
     x = torch.ones(n, 1, dtype=TORCH_DTYPE)
     return x / x.sum()
-
-
-def get_node_indicator(G: nx.graph, G_sub: nx.graph):
-    """
-    Create node indicator for G_sub in G (assuming G_sub was extracted from G)
-
-    :param G: A networkx graph
-    :param G_sub: A networkx sub-graph of G
-    :return: w_indicator - a vector with w[i] ==1 if node i of G is a node in G_sub
-    , otherwise w_indicator[i]==0.
-    """
-    # Set the indices corresponding to the subgraph nodes to 1
-    subgraph_node_indices = [list(G.nodes()).index(node) for node in G_sub.nodes()]
-    # subgraph_node_indices = list(G_sub.nodes())
-    w_indicator = np.zeros(len(G.nodes()))
-    w_indicator[subgraph_node_indices] = 1.0
-    return w_indicator
-
-
-def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
-    """
-    Create edge indicator for G_sub in G (assuming G_sub was extracted from G)
-
-    :param G: A networkx graph
-    :param G_sub: A networkx sub-graph of G
-    :return: edge_indicator - dict with values
-    edge_indicator[(i,j)] == edge_indicator[(j,i)] ==1 if (i,j) is an edge of G_sub,
-    and 0 otherwise.
-    """
-    edge_indicator = \
-        {(min(u, v), max(u, v)): 1 if (min(u, v), max(u, v))
-                                      in G_sub.edges() else 0 for u, v in G.edges()}
-
-    # Create symmetric adjacency matrix
-    num_nodes = len(G.nodes())
-    adj_matrix = np.zeros((num_nodes, num_nodes))
-
-    for (i, j), val in edge_indicator.items():
-        adj_matrix[i][j] = val
-        adj_matrix[j][i] = val  # Ensure it's symmetric
-
-    return edge_indicator, adj_matrix
-
-
-def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
-    # Create node incident vector
-    w = [0] * len(G.nodes())
-    for node in G.nodes():
-        # Get incident edges for node
-        incident_edges = [(min(node, neighbor), max(node, neighbor)) for neighbor in
-                          G.neighbors(node)]
-
-        # Calculate average of edge_indicator values for the incident edges
-        avg_value = max([edge_indicator[edge] for edge in incident_edges])
-
-        w[list(G.nodes).index(node)] = float(avg_value)
-    return w
 
 
 def plot_graph_with_colors(G: nx.graph,
@@ -221,4 +177,3 @@ def plot_graph_with_colors(G: nx.graph,
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
     ax.set_title(title)
-

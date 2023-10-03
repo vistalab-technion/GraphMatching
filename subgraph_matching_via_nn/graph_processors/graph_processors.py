@@ -5,7 +5,8 @@ import kmeans1d
 import networkx as nx
 import numpy as np
 
-from subgraph_matching_via_nn.utils.utils import NP_DTYPE
+from subgraph_matching_via_nn.utils.graph_utils import laplacian
+from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
 
 
 class BaseGraphProcessor:
@@ -50,13 +51,33 @@ class GraphProcessor(BaseGraphProcessor):
             w_th, centroids = kmeans1d.cluster(w, k=2)
             w_th = np.array(w_th)[:, None]
         elif type == 'top_m':
-            indices_of_top_m = np.argsort(w, axis=0)[-params["m"]:]  # top m
-            w_th = np.zeros_like(w, dtype=NP_DTYPE)
-            w_th[indices_of_top_m] = 1
+            w_th = top_m(w, params["m"])
         elif type == 'quantile':
             w_th = (w > np.quantile(w, params["quantile_level"]))
             w_th = np.array(w_th, dtype=np.float64)
+        elif type == 'diffusion':
+            A = (nx.adjacency_matrix(graph)).toarray()
+            D = np.diag(A.sum(axis=1))
+            L = D - A
+            # Eigenvalue decomposition of the Laplacian
+            eigenvalues, eigenvectors = np.linalg.eigh(L)
+            k = 10
+
+            # Generate k logarithmically spaced values of t from a large to small value
+            max_t = 100  # Change this to your desired maximum value
+            min_t = 0.01  # Change this to your desired minimum value
+            t_values = np.logspace(np.log10(max_t), np.log10(min_t), k)
+
+            w_th = w
+            for t in t_values:
+                # Apply the heat kernel using matrix exponentiation
+                heat_matrix = eigenvectors @ np.diag(
+                    np.exp(-t * eigenvalues)) @ eigenvectors.T
+                heat_w = heat_matrix @ w
+
+                # Binarize by keeping the largest m components
+                w_th = top_m(heat_w, params["m"])
+
         w_th = w_th / w_th.sum()
         w_th_dict = dict(zip(graph.nodes(), w_th))
-
         return w_th_dict
