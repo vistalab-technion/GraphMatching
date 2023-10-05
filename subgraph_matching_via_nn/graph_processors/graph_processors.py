@@ -4,8 +4,9 @@ from typing import Optional
 import kmeans1d
 import networkx as nx
 import numpy as np
+import scipy as sp
 
-from subgraph_matching_via_nn.utils.graph_utils import laplacian
+from subgraph_matching_via_nn.utils.graph_utils import laplacian, graph_edit_matrix
 from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
 
 
@@ -59,12 +60,17 @@ class GraphProcessor(BaseGraphProcessor):
             A = (nx.adjacency_matrix(graph)).toarray()
             D = np.diag(A.sum(axis=1))
             L = D - A
-            # Eigenvalue decomposition of the Laplacian
-            eigenvalues, eigenvectors = np.linalg.eigh(L)
+            # # Eigenvalue decomposition of the Laplacian
+            # eigenvalues, eigenvectors = np.linalg.eigh(L)
+
+            # Generalized eigenvalue decomposition of the Random Walk Laplacian
+            # eigenvalues, eigenvectors = np.linalg.eigh(L)
+            eigenvalues, eigenvectors = sp.linalg.eigh(L, D)
+
             k = 10
 
             # Generate k logarithmically spaced values of t from a large to small value
-            max_t = 100  # Change this to your desired maximum value
+            max_t = 10  # Change this to your desired maximum value
             min_t = 0.01  # Change this to your desired minimum value
             t_values = np.logspace(np.log10(max_t), np.log10(min_t), k)
 
@@ -73,7 +79,45 @@ class GraphProcessor(BaseGraphProcessor):
                 # Apply the heat kernel using matrix exponentiation
                 heat_matrix = eigenvectors @ np.diag(
                     np.exp(-t * eigenvalues)) @ eigenvectors.T
-                heat_w = heat_matrix @ w
+                heat_w = heat_matrix @ w_th
+
+                # Binarize by keeping the largest m components
+                w_th = top_m(heat_w, params["m"])
+        elif type == 'zoomout':
+            A = (nx.adjacency_matrix(graph)).toarray()
+            D = np.diag(A.sum(axis=1))
+            L = D - A
+
+            # Generalized eigenvalue decomposition of the Random Walk Laplacian
+            # eigenvalues, eigenvectors = np.linalg.eigh(L)
+            eigenvalues, eigenvectors = sp.linalg.eigh(L, D)
+
+            w_th = w
+            for i in range(2, A.shape[0]):
+                # Apply the heat kernel using matrix exponentiation
+                heat_w = eigenvectors[:, :i] @ eigenvectors[:, :i].T @ w_th
+
+                # Binarize by keeping the largest m components
+                w_th = top_m(heat_w, params["m"])
+
+        elif type == 'nonlinear_zoomout':
+            A = (nx.adjacency_matrix(graph)).toarray()
+            D = np.diag(A.sum(axis=1))
+            L = D - A
+            w_th = w
+            heat_w = w
+            for i in range(2, A.shape[0]):
+                E = graph_edit_matrix(A, 1 - params["m"] * w_th)
+                Ae = A - E
+
+                De = np.diag(Ae.sum(axis=1))
+                Le = De - Ae
+
+                # Generalized eigenvalue decomposition of the Random Walk Laplacian
+                eigenvalues, eigenvectors = np.linalg.eigh(Le)
+                # eigenvalues, eigenvectors = sp.linalg.eigh(Le, De)
+                # Apply the heat kernel using matrix exponentiation
+                heat_w = eigenvectors[:, :i] @ eigenvectors[:, :i].T @ w_th
 
                 # Binarize by keeping the largest m components
                 w_th = top_m(heat_w, params["m"])
