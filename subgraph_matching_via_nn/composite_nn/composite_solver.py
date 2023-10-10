@@ -103,7 +103,19 @@ class BaseCompositeSolver(nn.Module):
 
     def _create_optimizer(self):
         lr = self.params['lr']
-        return optim.SGD(self.composite_nn.parameters(), lr=lr)
+        solver_type = self.params.get("solver_type", None)
+        if solver_type == 'gd':
+            optimizer = optim.SGD(params=self.composite_nn.parameters(), lr=lr)
+        elif solver_type == 'lbfgs':
+            optimizer = optim.LBFGS(params=self.composite_nn.parameters(), lr=lr, max_iter=5,
+                                    max_eval=None,
+                                    tolerance_grad=1e-07,
+                                    tolerance_change=1e-09,
+                                    history_size=10,
+                                    line_search_fn=None)
+        else:
+            raise ValueError(f"Unknown optimizer choice: {solver_type}")
+        return optimizer
 
     def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
         # preprocess the graphs, e.g. to get a line-graph

@@ -4,6 +4,7 @@ from typing import List
 import torch
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import MomentEmbeddingNetwork, \
     SpectralEmbeddingNetwork
+from subgraph_matching_via_nn.utils.graph_utils import laplacian
 
 
 class EmbeddingNetworkType(Enum):
@@ -24,7 +25,7 @@ class GraphEmbeddingNetworkFactory:
                                                       moments_type=params["moment_type"])
 
             elif embedding_network_type == EmbeddingNetworkType.Spectral:
-                evals, _ = torch.linalg.eigh(SpectralEmbeddingNetwork.laplacian(sub_graph.A_sub))
+                evals, _ = torch.linalg.eigh(laplacian(sub_graph.A_sub))
                 params["n_eigs"] = min(indicator_size, 10)
                 params['diagonal_scale'] = 2 * torch.max(evals)
                 params['zero_eig_scale'] = 10

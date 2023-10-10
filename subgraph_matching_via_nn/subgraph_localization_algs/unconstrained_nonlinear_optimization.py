@@ -1,16 +1,8 @@
 import torch
 
-    # print final loss
-    with torch.no_grad():
-        loss, data_term, reg_term = evaluate_objective(A, x0, composite_nn,
-                                                       embedding_metric_nn,
-                                                       params)
-        print(f"Iteration {iteration}, Data: {data_term.item()}")
-        print(f"Iteration {iteration}, Reg: {reg_term.item()}")
-        print(f"Iteration {iteration}, Data + rho * Reg: {loss.item()}")
-
-
 # regularization terms
+from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix, laplacian, hamiltonian
+
 
 def spectral_reg(A, w, params):
     v = 1 - w * (params["m"])

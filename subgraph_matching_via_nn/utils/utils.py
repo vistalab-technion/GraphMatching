@@ -149,7 +149,7 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
     return w
 
 
-def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
+def plot_graph_with_colors(G: nx.graph,
                            distribution: Union[dict, np.ndarray] = None,
                            title: str = '',
                            ax=None,
@@ -158,7 +158,6 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
     """
 
     :param G: graph
-    :param G_sub: sub_graph of G
     :param distribution: either a node distribution (numpy array) or an edge
     distribution
     (dict of {edge tuple : distribution value})

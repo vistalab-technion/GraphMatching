@@ -211,7 +211,7 @@ class LocalizationBinarizationSimulator:
 
         to_line = processed_sub_graph.is_line_graph
         plot_services = PlotServices(LocalizationBinarizationSimulator.seed)
-        plot_services.plot_subgraph_indicators(sub_graph.G, sub_graph.G_sub, to_line, indicator_name_to_dict_map)
+        plot_services.plot_subgraph_indicators(sub_graph.G, to_line, indicator_name_to_dict_map)
 
         gt_node_distribution_processed = processed_sub_graph.w_gt
         loss, ref_loss = solver.compare(processed_sub_graph.A_full, processed_sub_graph.A_sub, gt_node_distribution_processed, A_sub_indicator=None)
