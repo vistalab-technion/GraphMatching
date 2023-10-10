@@ -1,3 +1,4 @@
+import pickle
 from logging import exception
 
 import numpy as np
@@ -5,6 +6,10 @@ import networkx as nx
 
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.utils.utils import get_node_indicator, get_edge_indicator
+from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
+    sample_connected_subgraph, generate_wheel_graph, generate_random_graph
+from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator, \
+    get_edge_indicator
 
 
 def load_graph(type: str = 'random',
@@ -24,17 +29,14 @@ def load_graph(type: str = 'random',
         n = graph_size  # Number of nodes in the graph
         m = subgraph_size  # Number of nodes in the subgraph
 
-        # Generate a random adjacency matrix A
-        A_upper = np.triu(np.random.randint(0, 2, size=(n, n)), k=1)
-        A = A_upper + A_upper.T
+        # TODO: add this to the choice, change to enum
+        G = generate_random_graph(n)
+        # G = generate_random_tree(n)
+        # G = generate_wheel_graph(n)
 
-        # Set diagonal elements to zero to remove self-loops
-        np.fill_diagonal(A, 0)
-
-        # Create a graph from the adjacency matrix
-        G = nx.from_numpy_array(A)
         # Generate a random subset of nodes for the subgraph
-        subgraph_nodes = np.random.choice(G.nodes(), size=m, replace=False)
+        # subgraph_nodes = np.random.choice(G.nodes(), size=m, replace=False)
+        subgraph_nodes = sample_connected_subgraph(G=G, m=m)
 
         # Create the subgraph by keeping only the edges that connect the selected subset of nodes
         G_sub = G.subgraph(subgraph_nodes)
@@ -60,13 +62,12 @@ def load_graph(type: str = 'random',
         edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
 
     elif 'subcircuit':
-        import pickle
 
         def remove_isolated_nodes_from_graph(graph):
             isolated_nodes_indices = list(nx.isolates(graph))
             graph.remove_nodes_from(isolated_nodes_indices)
 
-        g_full_path =  loader_params['data_path'] + loader_params['g_full_path']
+        g_full_path = loader_params['data_path'] + loader_params['g_full_path']
         g_sub_path = loader_params['data_path'] + loader_params['g_sub_path']
 
         G = pickle.load(open(g_full_path, 'rb'))
@@ -77,7 +78,6 @@ def load_graph(type: str = 'random',
         node_indicator = get_node_indicator(G=G, G_sub=G_sub)
         edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
 
-        pass
     else:
         raise exception(f"type = {type} not supported")
 

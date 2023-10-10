@@ -2,6 +2,8 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 
+from subgraph_matching_via_nn.utils.graph_utils import hamiltonian
+
 
 class BaseClassificationLayer(nn.Module):
 
@@ -10,6 +12,15 @@ class BaseClassificationLayer(nn.Module):
 
     def init_weights(self, init_value=None):
         pass
+
+
+class IdentityClassificationLayer(BaseClassificationLayer):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, A, x):
+        return x
 
 
 class SigmoidClassificationLayer(BaseClassificationLayer):
@@ -74,3 +85,20 @@ class SquaredNormalizedClassificationLayer(BaseClassificationLayer):
         x = x ** 2
         x = x / x.sum()
         return x
+
+
+class SpectralClassificationLayer(BaseClassificationLayer):
+
+    def __init__(self, indicator_scale: float, diagonal_scale: float):
+        super().__init__()
+        self._diagonal_scale = diagonal_scale
+        self._indicator_scale = indicator_scale
+
+    def forward(self, A, x):
+        v = 1 - self._indicator_scale * x
+        H = hamiltonian(A, v, self._diagonal_scale)
+        # TODO: possibly we can replace that by some inverse power iterations
+        evals, evecs = torch.linalg.eigh(H)
+        w = evecs[:, 0][:,None]
+        w = w / w.sum()
+        return w

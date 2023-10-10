@@ -1,8 +1,11 @@
 from logging import exception
 import networkx as nx
 import numpy as np
+import scipy as sp
 
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.utils.graph_utils import laplacian, graph_edit_matrix
+from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
 
 
 class BaseGraphProcessor:

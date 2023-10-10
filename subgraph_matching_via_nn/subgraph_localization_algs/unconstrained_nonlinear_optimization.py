@@ -1,18 +1,22 @@
 import torch
 
-
-def edited_Laplacian(A, v):
-    E = A * (v - v.T) ** 2
-    A_edited = A - E
-    L_edited = torch.diag(A_edited.sum(axis=1)) - A_edited
-    return L_edited
+    # print final loss
+    with torch.no_grad():
+        loss, data_term, reg_term = evaluate_objective(A, x0, composite_nn,
+                                                       embedding_metric_nn,
+                                                       params)
+        print(f"Iteration {iteration}, Data: {data_term.item()}")
+        print(f"Iteration {iteration}, Reg: {reg_term.item()}")
+        print(f"Iteration {iteration}, Data + rho * Reg: {loss.item()}")
 
 
 # regularization terms
 
 def spectral_reg(A, w, params):
-    L_edited = edited_Laplacian(A, 1 - w * (params["m"]))
-    reg = torch.norm(L_edited @ w, p=2) ** 2
+    v = 1 - w * (params["m"])
+    E = graph_edit_matrix(A, v)
+    L_edited = laplacian(A - E)
+    reg = torch.norm(L_edited @ v, p=2) ** 2
     return reg
 
 
@@ -32,3 +36,14 @@ def binary_penalty(A, w, params):
     # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
     reg = torch.sum(w * (1 / params["m"] - w) ** 2)
     return reg
+
+
+def log_barrier_penalty(A, w, params):
+    v = 1 - w * (params["m"])
+    evals, evecs = torch.linalg.eigh(hamiltonian(A, v, params["diagonal_scale"]))
+    lambda_second = evals[1]
+    c = params['second_eig']
+    if lambda_second <= c:
+        return torch.inf  # or some large value to signify the penalty
+    else:
+        return -torch.log(lambda_second - params['second_eig'])

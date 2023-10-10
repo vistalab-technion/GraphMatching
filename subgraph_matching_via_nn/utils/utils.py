@@ -9,6 +9,9 @@ import numpy as np
 from scipy.stats import norm
 import seaborn as sns
 
+from subgraph_matching_via_nn.utils.graph_utils import \
+    node_indicator_from_edge_indicator
+
 TORCH_DTYPE = torch.float64
 NP_DTYPE = np.float64
 
@@ -51,7 +54,10 @@ def plot_degree_distribution(graph, n_moments=4, ax=None):
     # Fit a distribution to the data
     mu, std = norm.fit(degree_sequence)
     x = np.linspace(min(degree_sequence), max(degree_sequence), 100)
-    y = norm.pdf(x, mu, std)
+    if not np.all(x == x[0]):
+        y = norm.pdf(x, mu, std)
+    else:
+        y = np.ones_like(x)
     sns.lineplot(x=x, y=y, color='red', label='Fitted Normal Distribution', ax=ax)
 
     # Plot the KDE
@@ -69,6 +75,13 @@ def plot_degree_distribution(graph, n_moments=4, ax=None):
         moments.append(np.mean(np.power(degree_sequence, i)))
 
     return moments
+
+
+def top_m(w, m):
+    indices_of_top_m = np.argsort(w, axis=0)[-m:]  # top m
+    w_th = np.zeros_like(w, dtype=NP_DTYPE)
+    w_th[indices_of_top_m] = 1
+    return w_th
 
 
 def uniform_dist(n):
@@ -191,44 +204,17 @@ def plot_graph_with_colors(G: nx.graph, G_sub: nx.graph,
     elif distribution is None:
         # Generate a list of colors for nodes, red for subgraph nodes and green
         # for the rest
-        node_probabilities = [1.0 if node in G_sub.nodes() else 0.0 for node in
-                              G.nodes()]
+        node_probabilities = [1.0 for node in G.nodes()]
+        edge_probabilities = [1.0 for edge in G.edges()]
+
+        # node_probabilities = [1.0 if node in G.nodes() else 0.0 for node in
+        #                       G.nodes()]
         # Generate a list of colors for edges, red for subgraph edges and green
         # for the rest
-        edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
-                              G.edges()]
+        # edge_probabilities = [1.0 if edge in G.edges() else 0.0 for edge in
+        #                       G.edges()]
     else:
         raise ("Only NumPy array or a dictionary are supported.")
-
-    # if edge_indicator is not None:
-    #     norm = mcolors.Normalize(vmin=min(edge_indicator.values()),
-    #                              vmax=max(edge_indicator.values()))
-    #     edge_probabilities = [norm(edge_indicator[(u, v)]) for u, v in
-    #                           G.edges()]
-    #     node_probabilities = norm(node_indicator_from_edge_indicator(G=G,
-    #                                                                  edge_indicator=edge_indicator))
-    # else:
-    #     if node_indicator is not None:
-    #         # Normalize w to match the colormap range
-    #         norm = mcolors.Normalize(vmin=min(node_indicator), vmax=max(node_indicator))
-    #
-    #         # Generate a list of colors for nodes based on w values
-    #         node_probabilities = norm(node_indicator)
-    #         edge_probabilities = [norm((node_indicator[list(G.nodes).index(u)] +
-    #                                     node_indicator[list(G.nodes).index(v)]) / 2.0)
-    #                               for u, v in
-    #                               G.edges()]
-    #
-    #     else:
-    #
-    #         # Generate a list of colors for nodes, red for subgraph nodes and green
-    #         # for the rest
-    #         node_probabilities = [1.0 if node in G_sub.nodes() else 0.0 for node in
-    #                               G.nodes()]
-    #         # Generate a list of colors for edges, red for subgraph edges and green
-    #         # for the rest
-    #         edge_probabilities = [1.0 if edge in G_sub.edges() else 0.0 for edge in
-    #                               G.edges()]
 
     node_colors = cmap(node_probabilities)
     edge_colors = cmap(edge_probabilities)

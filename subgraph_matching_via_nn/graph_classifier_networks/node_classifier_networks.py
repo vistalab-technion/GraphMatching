@@ -10,15 +10,18 @@ import networkx as nx
 
 from subgraph_matching_via_nn.graph_generators.graph_generators import \
     BaseGraphGenerator
+from subgraph_matching_via_nn.utils.graph_utils import hamiltonian
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 import torchsort
 
 
 class BaseNodeClassifierNetwork(nn.Module):
-    def __init__(self, classification_layer):
+    def __init__(self, classification_layer, input_dim=None):
         super().__init__()
         self.classification_layer = classification_layer
-
+        # if input_dim is not None:
+        #     self.register_buffer('uniform_input',
+        #                          torch.ones(1, input_dim, dtype=TORCH_DTYPE))
 
     def train_node_classifier(self,
                               G_sub: nx.graph = None,
@@ -41,7 +44,7 @@ class BaseNodeClassifierNetwork(nn.Module):
 
 class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, output_dim, classification_layer):
-        super().__init__(classification_layer=classification_layer)
+        super().__init__(classification_layer=classification_layer, input_dim=None)
 
         self.weights = nn.Parameter(torch.Tensor(output_dim, 1).type(TORCH_DTYPE))
         self.classification_layer = classification_layer
@@ -66,55 +69,61 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, input_dim, hidden_dim, output_dim, classification_layer):
-        super().__init__(classification_layer=classification_layer)
+    def __init__(self, input_dim, hidden_dim, output_dim, num_mid_layers,
+                 classification_layer):
+        super().__init__(classification_layer=classification_layer,
+                         input_dim=input_dim)
 
-        self.fc1 = nn.Linear(input_dim, hidden_dim,
-                             dtype=TORCH_DTYPE)  # First Fully-Connected Layer
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim,
-                             dtype=TORCH_DTYPE)  # Second Fully-Connected Layer
-        self.fc3 = nn.Linear(hidden_dim, output_dim,
-                             dtype=TORCH_DTYPE)  # Third Fully-Connected Layer with output size output_dim
-        self.skip_connection = nn.Linear(input_dim, hidden_dim,
-                                         dtype=TORCH_DTYPE)  # Skip connection
-        self.register_buffer('uniform_feature', torch.ones(1, input_dim))
+        self.input_dim = input_dim
+        self.fc_in = nn.Linear(input_dim, hidden_dim,
+                               dtype=TORCH_DTYPE)  # First Fully-Connected Layer
+        self.mid_layers = nn.Sequential()
+        for i in range(num_mid_layers):
+            self.mid_layers.add_module(name="fc_{i}",
+                                       module=nn.Linear(hidden_dim, hidden_dim,
+                                                        dtype=TORCH_DTYPE))
+            self.mid_layers.add_module(name=f"relu_{i}", module=nn.ReLU())
+
+        self.fc_out = nn.Linear(hidden_dim, output_dim,
+                                dtype=TORCH_DTYPE)  # Third Fully-Connected Layer with output size output_dim
 
     def forward(self, A, x=None, params: dict = None):
         if x is None:
-            x = self.uniform_feature.type(TORCH_DTYPE)
+            x = torch.ones(1, self.input_dim, dtype=A.dtype)
 
-        skip_x = self.skip_connection(x)  # Compute skip connection
-        x = self.fc1(x)  # Apply first fully-connected layer
+        x = self.fc_in(x)  # Apply first fully-connected layer
+        skip_x = x
+        x = F.relu(x)  # Apply ReLU activation function
+        x = self.mid_layers(x)  # Apply second fully-connected layer
         x = x + skip_x  # Add skip connection
         x = F.relu(x)  # Apply ReLU activation function
-        x = self.fc2(x)  # Apply second fully-connected layer
-        x = x + skip_x  # Add skip connection
-        x = F.relu(x)  # Apply ReLU activation function
-        x = self.fc3(x)  # Apply third fully-connected layer
+        x = self.fc_out(x)  # Apply third fully-connected layer
         # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
 
         w = self.classification_layer(A, x)
-
         return w
 
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, input_dim, hidden_dim, num_classes, classification_layer):
+    def __init__(self, num_node_features_input, hidden_dim, num_node_features_output,
+                 classification_layer):
         super(GCNNodeClassifierNetwork, self).__init__(
-            classification_layer=classification_layer)
-        self.conv1 = GCNConv(input_dim, hidden_dim, dtype=TORCH_DTYPE)
-        self.conv2 = GCNConv(hidden_dim, num_classes, dtype=TORCH_DTYPE)
-        self.skip_connection = nn.Identity(input_dim, num_classes,
-                                           dtype=torch.float)  # Skip connection
-        # self.register_buffer('uniform_feature', torch.ones(1, input_dim))
+            classification_layer=classification_layer,
+            input_dim=num_node_features_input)
+        self.num_node_features_input = num_node_features_input
+        self.conv1 = GCNConv(num_node_features_input, hidden_dim, dtype=TORCH_DTYPE)
+        self.conv2 = GCNConv(hidden_dim, num_node_features_output, dtype=TORCH_DTYPE)
+        self.skip_connection = nn.Identity(num_node_features_input,
+                                           num_node_features_output,
+                                           dtype=TORCH_DTYPE)  # Skip connection
 
     def forward(self, A, x=None, params: dict = None):
         edge_index = A.nonzero().t()
 
         if x is None:
-            x = torch.ones(A.shape[0], 1)
-        skip_x = self.skip_connection(x.float())
+            x = torch.ones(A.shape[0], self.num_node_features_input)
+        skip_x = self.skip_connection(x)
 
         x = self.conv1(x, edge_index)
         x = F.relu(x)
