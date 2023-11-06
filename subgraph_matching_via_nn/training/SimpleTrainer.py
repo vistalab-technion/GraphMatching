@@ -464,14 +464,14 @@ if __name__ == "__main__":
                          'g_full_path': COMP1_FULL_path,
                          'g_sub_path': COMP1_SUB0_path}
 
-        G1, G1_sub, w_indicator1, edge_indicator1 = \
+        sub_graph1 = \
             load_graph(type='random',
                        loader_params=loader_params)  # type = 'random', 'example', 'subcircuit'
-        G2, G2_sub, w_indicator2, edge_indicator2 = \
+        sub_graph2 = \
             load_graph(type='random',
                        loader_params=loader_params)  # type = 'random', 'example', 'subcircuit'
-        G1_annotated = AnnotatedGraph(G1)
-        G2_annotated = AnnotatedGraph(G2)
+        G1_annotated = AnnotatedGraph(sub_graph1.G)
+        G2_annotated = AnnotatedGraph(sub_graph2.G)
         train_samples_list.append(Pair_Sample_Info(
             subgraph=G1_annotated,
             masked_graph=G2_annotated,

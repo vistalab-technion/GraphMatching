@@ -4,6 +4,8 @@ from logging import exception
 import numpy as np
 import networkx as nx
 
+from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.utils.utils import get_node_indicator, get_edge_indicator
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
     sample_connected_subgraph, generate_wheel_graph, generate_random_graph
 from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator, \
@@ -16,11 +18,7 @@ def load_graph(type: str = 'random',
     :param loader_params: dict of parameters for loader
     :param type: 'random' - random graph
                  'example' some fixed example
-    :return:  G - networkx graph object
-              G_sub - subgraph
-              node_indicator - node indicator (i.e., 1 for nodes of G_sub that are in G)
-              edge_indicator -
-              edge indicator (i.e., dict[(i,j)]= 1 for edges of G_sub that are in G)
+    :return: SubGraph
     """
     if type == 'random':
 
@@ -83,4 +81,17 @@ def load_graph(type: str = 'random',
     else:
         raise exception(f"type = {type} not supported")
 
-    return G, G_sub, node_indicator, edge_indicator
+    return SubGraph(G, G_sub, node_indicator, edge_indicator)
+
+#
+# # Set the size of the graph and the subgraph
+# n = 20  # Number of nodes in the graph (for random graph)
+# m = 7  # Number of nodes in the subgraph (for random graph)
+# seed = 10  # for plotting
+# loader_params = {'graph_size': 30, 'subgraph_size': 10}
+# loader_params['g_full_path'] = '/Users/amitboy/PycharmProjects/GraphMatching/subgraph_matching_via_nn/data/subcircuits/compound1/comp1_32_full_graph.p'
+# loader_params['g_sub_path'] = '/Users/amitboy/PycharmProjects/GraphMatching/subgraph_matching_via_nn/data/subcircuits/compound1/comp1_32_subgraph0.p'
+# sub_graph =\
+#     load_graph(type='subcircuit', loader_params=loader_params)  # type = 'random', 'example', 'subcircuit'
+#
+# print('done')
