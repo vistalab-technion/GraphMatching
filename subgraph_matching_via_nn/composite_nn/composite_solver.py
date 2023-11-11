@@ -67,13 +67,13 @@ class BaseCompositeSolver(nn.Module):
 
         print(f"init loss (no reg): {loss}")  # without regularization
 
-        reg = self._get_reg_loss(A_full_processed, w)
+        reg = self.get_reg_loss(A_full_processed, w)
         full_loss = loss + reg
         print(f"init full loss (with reg): {full_loss}")  # with regularization
 
         return loss, ref_loss
 
-    def _get_reg_loss(self, A_full_processed, w):
+    def get_reg_loss(self, A_full_processed, w):
         reg_terms_list = [reg_param * reg_term(A_full_processed, w, self.params) for reg_param, reg_term in
                            zip(self.params["reg_params"], self.params["reg_terms"])]
 
@@ -88,7 +88,7 @@ class BaseCompositeSolver(nn.Module):
         loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
                                         embeddings_subgraph=embeddings_sub)
 
-        reg = self._get_reg_loss(A, w)
+        reg = self.get_reg_loss(A, w)
         return loss, reg
 
     def __log_loss(self, iteration, loss, reg):
