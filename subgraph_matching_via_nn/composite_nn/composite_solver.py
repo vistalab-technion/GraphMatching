@@ -115,7 +115,16 @@ class BaseCompositeSolver(nn.Module):
                                     line_search_fn=None)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
-        return optimizer
+
+        scheduler_type = self.params.get("scheduler_type", None)
+        if scheduler_type == 'StepLR':
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
+        elif scheduler_type == 'CosineAnnealingLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        else:
+            return None, optimizer
+
+        return scheduler, optimizer
 
     def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
         # preprocess the graphs, e.g. to get a line-graph
@@ -151,7 +160,7 @@ class BaseCompositeSolver(nn.Module):
                                                  w=uniform_dist(A_sub.shape[0]).detach())
 
         self.composite_nn.train() # Set the model to training mode
-        optimizer = self._create_optimizer()
+        scheduler, optimizer = self._create_optimizer()
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
             loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
@@ -162,6 +171,10 @@ class BaseCompositeSolver(nn.Module):
             optimizer.step()
 
             self.__log_loss(iteration, loss, reg)
+
+            if (iteration + 1) % 100 == 0:
+                if scheduler is not None:
+                    scheduler.step()
 
         w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().numpy()
         return w_star
