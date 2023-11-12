@@ -1,0 +1,3 @@
+[submodule "powerful-gnns"]
+	path = powerful-gnns
+	url = git@github.com:weihua916/powerful-gnns.git
