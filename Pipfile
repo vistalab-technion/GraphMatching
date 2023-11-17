@@ -25,6 +25,7 @@ torch_geometric = "*"
 loss_landscapes = "*"
 seaborn = "*"
 torchsort = "*"
+polyrat = "*"
 
 [dev-packages]
 pytest = "*"
