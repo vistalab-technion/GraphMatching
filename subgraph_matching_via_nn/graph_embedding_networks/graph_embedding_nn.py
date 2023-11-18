@@ -1,3 +1,4 @@
+import abc
 from abc import abstractmethod, ABC
 
 import torch
@@ -21,6 +22,12 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     @property
     @abstractmethod
     def embedding_type(self):
+        pass
+
+
+class GraphsBatchEmbeddingNetwork(BaseGraphEmbeddingNetwork, abc.ABC):
+    @abstractmethod
+    def forward_graphs(self, batch_graph):
         pass
 
 

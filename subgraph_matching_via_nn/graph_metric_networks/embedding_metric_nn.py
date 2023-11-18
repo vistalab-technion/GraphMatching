@@ -19,19 +19,25 @@ class EmbeddingMetricNetwork(BaseEmbeddingMetricNetwork):
         """
         super().__init__(loss_fun)
 
-    def forward(self, embeddings_full, embeddings_subgraph):
+    def forward(self, embeddings_full, embeddings_subgraph, is_sum_tensor_into_single_item=True):
         """
         :param embeddings_full: either a list of embedding tensors or a single tensor
         of the full graph
         :param embeddings_subgraph: either a list of embedding tensors or a single tensor
         of the sub graph
+        :param is_sum_tensor_into_single_item: False for returning a tensor of pairs losses;
+        True for returning the sum of pair losses as a single element
         :return: loss between embeddings
         """
         if isinstance(embeddings_full, list):
-            loss = 0.0
-            for embedding_full, embedding_subgraph in zip(embeddings_full,
-                                                          embeddings_subgraph):
-                loss += self._loss_fun(embedding_full, embedding_subgraph)
+            losses = [self._loss_fun(embedding_full, embedding_subgraph)
+                      for embedding_full, embedding_subgraph in zip(embeddings_full, embeddings_subgraph)]
+            losses = torch.stack(losses)
+
+            if is_sum_tensor_into_single_item:
+                loss = losses.sum()
+            else:
+                return losses
         elif isinstance(embeddings_full, torch.Tensor):
             loss = self._loss_fun(embeddings_full, embeddings_subgraph)
         else:

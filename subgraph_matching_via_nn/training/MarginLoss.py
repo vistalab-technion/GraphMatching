@@ -12,12 +12,14 @@ class MarginLoss(nn.Module):
     def forward(self, distances, pos_labels, neg_labels):
         pos_loss, neg_loss = self.get_loss(distances, pos_labels, neg_labels)
 
+        # self.print_loss_statistics(distances, pos_labels, neg_labels)
+
         return pos_loss + neg_loss
 
     def get_loss(self, distances, pos_labels, neg_labels):
         pos_loss = pos_labels.type(dtype=torch.float) * distances
         neg_loss = neg_labels * (torch.clamp(self.margin - distances, min=0.0) ** 2) / 2
-        print(f'pos loss: {pos_loss.sum()}\t neg loss: {neg_loss.sum()}')
+        # print(f'pos loss: {pos_loss.sum()}\t neg loss: {neg_loss.sum()}')
 
         return pos_loss, neg_loss
 
