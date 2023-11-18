@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
-
+from matplotlib import pyplot as plt
+import seaborn as sns
 from common.PlotService import plot_heatmap_basic
 
 
@@ -41,5 +42,8 @@ def calculate_energy_based_hidden_rep(hidden_rep, threshold=0.5):
 
 
 def show_distance_matrix(distances, title="GraphEmbeddingsDistancesMatrix"):
-    #distances = torch.pow(torch.cdist(graph_embeddings, graph_embeddings), 2)
-    plot_heatmap_basic(distances.detach().cpu().numpy(), title)
+    # plot_heatmap_basic(distances.detach().cpu().numpy(), title)
+
+    sns.heatmap(distances.detach().cpu().numpy())
+    plt.title(title)
+    plt.show()
