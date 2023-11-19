@@ -135,6 +135,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         Returns: all train losses list and all validation losses list
 
         """
+        self.graph_similarity_module.train()
+
         train_loader, val_loader = self.get_data_loaders(train_samples_list,
                                                          val_samples_list,
                                                          new_samples_amount)
