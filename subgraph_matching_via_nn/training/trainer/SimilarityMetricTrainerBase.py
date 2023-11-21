@@ -4,7 +4,7 @@ import itertools as it
 import math
 import os
 import time
-from typing import Dict, Tuple, List, TypeVar
+from typing import Dict, Tuple, List, TypeVar, Any
 import torch_geometric as tg
 import numpy as np
 import torch
@@ -311,14 +311,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
         plt.savefig(os.path.join(dump_path, 'loss_curve.png'))
         plt.close()
 
-    T = TypeVar("T", Pair_Sample_Info, PairSampleInfo_with_S2VGraphs)
+    T = TypeVar("T")
 
     @abc.abstractmethod
-    def _get_pairs_list_loss(self, batch: Tuple[T, List[T]]) -> torch.Tensor:
+    def _get_pairs_list_loss(self, batch: T) -> torch.Tensor:
         pass
 
     def calculate_loss_for_batch(self,
-                                 batch: Tuple[T, List[T]],
+                                 batch: T,
                                  is_train: bool) \
             -> torch.Tensor:
         """

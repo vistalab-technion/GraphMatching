@@ -55,16 +55,14 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
 
     @staticmethod
     def custom_collate(samples_batch):
-        pair_sample_info_samples_batch = [sample.pair_sample_info for sample in samples_batch]
-        collated_samples_batch, _ = SimilarityMetricTrainer.custom_collate(pair_sample_info_samples_batch)
+        return samples_batch
 
-        return collated_samples_batch, samples_batch
-
-    def _get_pairs_list_loss(self, batch: Tuple[Pair_Sample_Info, List[PairSampleInfo_with_S2VGraphs]]) -> torch.Tensor:
-        collated_samples, samples = batch
+    def _get_pairs_list_loss(self, batch: List[PairSampleInfo_with_S2VGraphs]) -> torch.Tensor:
+        samples = batch
 
         embeddings_metric_loss = self.graph_similarity_module.forward(
             [sample.s2v_graphs for sample in samples]
         )
 
-        return self.get_aggregated_pairs_batch_distance(embeddings_metric_loss, (collated_samples, [elem.pair_sample_info for elem in samples]))
+        return self.get_aggregated_pairs_batch_distance(embeddings_metric_loss,
+                                                        (None, [elem.pair_sample_info for elem in samples]))
