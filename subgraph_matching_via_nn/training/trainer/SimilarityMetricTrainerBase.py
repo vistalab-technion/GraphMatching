@@ -177,20 +177,25 @@ class SimilarityMetricTrainerBase(abc.ABC):
             epoch_train_loss = 0
             epoch_val_loss = 0
 
-            for train_batch, val_batch in zip(train_loader, it.cycle(val_loader)):
+            for train_batch in train_loader:
                 batch_index += 1
-
-                # validation loss
-                val_loss = self.calculate_loss_for_batch(val_batch,
-                                                         is_train=False).item()
-                epoch_val_loss += val_loss
 
                 # train loss
                 train_loss = self.calculate_loss_for_batch(train_batch, is_train=True)
-                epoch_train_loss += train_loss.item()
+                epoch_train_loss += train_loss
 
                 # optimization step
                 self.optimization_step(model, train_loss)
+
+            epoch_train_loss = epoch_train_loss.item()
+
+            for val_batch in val_loader:
+                # validation loss
+                val_loss = self.calculate_loss_for_batch(val_batch,
+                                                         is_train=False)
+                epoch_val_loss += val_loss
+
+            epoch_val_loss = epoch_val_loss.item()
 
             all_train_losses += [epoch_train_loss]
             all_val_losses += [epoch_val_loss]
@@ -250,6 +255,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
     def get_grad_distance(self, pair_sample_info: PairSampleBase,
                           localization_object: object):
         if localization_object is not None:
+            #TODO: Avoid memory sync between cpu to CUDA, if possible [remove .to(self.device)]
             pair_sample_info.localization_object = localization_object.to(self.device)
 
         # this part takes relatively a long time
