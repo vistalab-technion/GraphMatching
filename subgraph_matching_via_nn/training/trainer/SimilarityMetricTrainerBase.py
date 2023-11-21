@@ -81,7 +81,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                     f'train:{np.average(train_losses)}\t val:{np.average(val_losses)}\n')
 
     def optimization_step(self, model, loss):
-        self.opt.zero_grad()
+        self.opt.zero_grad(set_to_none=True)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.get_params_list(), self.max_grad_norm)
         self.opt.step()
