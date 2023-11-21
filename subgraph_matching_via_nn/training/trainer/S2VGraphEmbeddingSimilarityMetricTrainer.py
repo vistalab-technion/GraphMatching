@@ -9,7 +9,6 @@ from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import BaseG
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
 from subgraph_matching_via_nn.training.trainer.PairSampleInfo_with_S2VGraphs import PairSampleInfo_with_S2VGraphs
 from subgraph_matching_via_nn.training.trainer.SimilarityMetricTrainerBase import SimilarityMetricTrainerBase
-from subgraph_matching_via_nn.training.trainer.SimilarityMetricTrainer import SimilarityMetricTrainer
 
 
 class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
@@ -26,11 +25,11 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
         # nx.Graph -> S2VGraph
         s2v_graph = S2VGraph(annotated_graph.g, label=None)
         batch_graph, _ = load_data_given_graph_list_and_label_map([s2v_graph], label_dict = {}, degree_as_tag=True,
-                                                                  print_stats=False)
+                                                                  device=self.device, print_stats=False)
 
         # node_features: w
         # need to override the node_features
-        batch_graph[0].node_features = annotated_graph.node_indicator
+        batch_graph[0].node_features = annotated_graph.node_indicator.to(device=self.device)
 
         return batch_graph[0]
 

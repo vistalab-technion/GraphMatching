@@ -21,7 +21,7 @@ class GNNEmbeddingNetwork(GraphsBatchEmbeddingNetwork):
         # nx.Graph -> S2VGraph
         s2v_graph = S2VGraph(G, label=None)
         batch_graph, _ = load_data_given_graph_list_and_label_map([s2v_graph], label_dict = {}, degree_as_tag=True,
-                                                                  print_stats=False)
+                                                                  device=w.device, print_stats=False)
 
         # node_features: w
         # need to override the node_features
