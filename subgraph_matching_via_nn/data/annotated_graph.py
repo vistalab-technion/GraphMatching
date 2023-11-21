@@ -2,6 +2,7 @@ import networkx as nx
 import torch
 from torch import Tensor
 
+from common.graph_utils import relabel_graph_nodes_by_contiguous_order
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
@@ -19,12 +20,9 @@ class AnnotatedGraph(object):
             label: an integer graph label
         '''
         self.label = label
+
+        g = relabel_graph_nodes_by_contiguous_order(g, copy=True)
         self.g = g
-        # self.node_tags = node_tags
-        # self.neighbors = []
-        # self.node_features = node_features
-        # self.edge_mat = None
-        # self.max_neighbor = 0
 
         self.node_attribute_name_to_vector_map = {}
         self.edge_attribute_name_to_vector_map = {}
@@ -36,9 +34,9 @@ class AnnotatedGraph(object):
             n_non_isolated_nodes = len(
                 list(filter(lambda val: val > 0, list(degrees_map.values()))))
 
-            for node_i in range(0, n):
-                if degrees_map[node_i] > 0:
-                    node_attributes[node_i] = 1 / n_non_isolated_nodes
+            for node_index, node_id in enumerate(g.nodes):
+                if degrees_map[node_id] > 0:
+                    node_attributes[node_index] = 1 / n_non_isolated_nodes
 
         self.attach_node_attributes(node_attributes, node_attribute_name)
 
