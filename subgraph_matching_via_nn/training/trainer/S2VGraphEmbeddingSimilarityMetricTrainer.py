@@ -16,12 +16,17 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
                  problem_params: Dict, solver_params: Dict):
         super(S2VGraphEmbeddingSimilarityMetricTrainer, self).__init__(graph_similarity_module, dump_base_path,
                                                       problem_params, solver_params)
+        self.annotated_graph_to_converted_s2v_graph_map = {}
 
     @staticmethod
     def get_model_expected_input_dim(sample_pair: Pair_Sample_Info):
         return sample_pair.masked_graph.node_indicator.shape[1]
 
     def __convert_annotated_graph_into_s2vgraph(self, annotated_graph: AnnotatedGraph):
+        # use caching
+        if annotated_graph in self.annotated_graph_to_converted_s2v_graph_map:
+            return self.annotated_graph_to_converted_s2v_graph_map[annotated_graph]
+
         # nx.Graph -> S2VGraph
         s2v_graph = S2VGraph(annotated_graph.g, label=None)
         batch_graph, _ = load_data_given_graph_list_and_label_map([s2v_graph], label_dict = {}, degree_as_tag=True,
@@ -29,9 +34,12 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
 
         # node_features: w
         # need to override the node_features
-        batch_graph[0].node_features = annotated_graph.node_indicator.to(device=self.device)
+        s2v_graph = batch_graph[0]
+        s2v_graph.node_features = annotated_graph.node_indicator.to(device=self.device)
 
-        return batch_graph[0]
+        self.annotated_graph_to_converted_s2v_graph_map[annotated_graph] = s2v_graph
+
+        return s2v_graph
 
     def __convert_pair_sample_info_list_to_s2vgraph_tuple_list(self, pair_sample_info_list: List[Pair_Sample_Info]):
         return [
@@ -50,6 +58,8 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
 
         train_loader, val_loader = self._build_data_loaders(combined_types_train_set, combined_types_val_set,
                                                             S2VGraphEmbeddingSimilarityMetricTrainer.custom_collate)
+
+        self.annotated_graph_to_converted_s2v_graph_map = {}
 
         return train_loader, val_loader
 
