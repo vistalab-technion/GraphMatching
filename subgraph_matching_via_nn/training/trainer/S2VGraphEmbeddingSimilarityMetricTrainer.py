@@ -35,7 +35,8 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
         # node_features: w
         # need to override the node_features
         s2v_graph = batch_graph[0]
-        s2v_graph.node_features = annotated_graph.node_indicator.to(device=self.device)
+        s2v_graph.node_features = annotated_graph.node_indicator
+        s2v_graph.to(device=self.device)
 
         self.annotated_graph_to_converted_s2v_graph_map[annotated_graph] = s2v_graph
 
