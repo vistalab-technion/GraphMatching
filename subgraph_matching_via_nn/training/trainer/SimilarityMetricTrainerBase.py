@@ -121,12 +121,15 @@ class SimilarityMetricTrainerBase(abc.ABC):
         # if self.device != "cpu":
         #     train_loader.pin_memory = True
 
-        val_loader = tg.data.DataLoader(validation_set, batch_size=self.batch_size)
-        val_loader.collate_fn = collate_func
+        if len(validation_set) != 0:
+          val_loader = tg.data.DataLoader(validation_set, batch_size=self.batch_size)
+          val_loader.collate_fn = collate_func
         # val_loader.num_workers = 4 * 1
         # if self.device != "cpu":
         #     val_loader.pin_memory = True
-
+        else:
+          val_loader = None
+        
         return train_loader, val_loader
 
     def train(self, train_samples_list, val_samples_list, new_samples_amount=0):
@@ -146,6 +149,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         train_loader, val_loader = self.get_data_loaders(train_samples_list,
                                                          val_samples_list,
                                                          new_samples_amount)
+        print("Data loaders are built")                                                         
         dump_base_path = self.dump_base_path
 
         dump_path = os.path.join(dump_base_path, str(time.time()))
@@ -184,6 +188,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             epoch_val_loss = 0
 
             for train_batch in train_loader:
+                print(f"Batch #{batch_index}")
                 batch_index += 1
 
                 # train loss
@@ -195,13 +200,16 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
             epoch_train_loss = epoch_train_loss.item()
 
-            for val_batch in val_loader:
-                # validation loss
-                val_loss = self.calculate_loss_for_batch(val_batch,
-                                                         is_train=False)
-                epoch_val_loss += val_loss
+            if val_loader is None:
+                epoch_val_loss = epoch_train_loss
+            else:
+                for val_batch in val_loader:
+                    # validation loss
+                    val_loss = self.calculate_loss_for_batch(val_batch,
+                                                             is_train=False)
+                    epoch_val_loss += val_loss
 
-            epoch_val_loss = epoch_val_loss.item()
+                epoch_val_loss = epoch_val_loss.item()
 
             all_train_losses += [epoch_train_loss]
             all_val_losses += [epoch_val_loss]
