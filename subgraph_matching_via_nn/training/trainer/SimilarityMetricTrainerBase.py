@@ -59,6 +59,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
                                                device=self.device)
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
+                                                                
+        self.previous_train_loader = None
+        self.previous_val_loader = None
 
     def _save_model(self, model, dump_path):
         model_state_dict = copy.deepcopy(model.state_dict())
@@ -132,10 +135,11 @@ class SimilarityMetricTrainerBase(abc.ABC):
         
         return train_loader, val_loader
 
-    def train(self, train_samples_list, val_samples_list, new_samples_amount=0):
+    def train(self, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
         """
         Train graph descriptor (model)
         Args:
+            use_existing_data_loaders: boolean flag to indicate if to build data loaders or use the existing ones
             train_samples_list: list of graph pairs for training
             val_samples_list: list of graph pairs for validation
             new_samples_amount: how many of the train samples list were not trained previously. if 0 is passed, all train
@@ -146,10 +150,18 @@ class SimilarityMetricTrainerBase(abc.ABC):
         """
         self.graph_similarity_module.train()
 
-        train_loader, val_loader = self.get_data_loaders(train_samples_list,
-                                                         val_samples_list,
-                                                         new_samples_amount)
-        print("Data loaders are built")                                                         
+        
+        if not use_existing_data_loaders:
+            train_loader, val_loader = self.get_data_loaders(train_samples_list,
+                                                             val_samples_list,
+                                                             new_samples_amount)
+            self.previous_train_loader = train_loader
+            self.previous_val_loader = val_loader
+            print("Data loaders were built")
+        else:
+            train_loader = self.previous_train_loader
+            val_loader = self.previous_val_loader
+            print("Using existing data loaders")                                                      
         dump_base_path = self.dump_base_path
 
         dump_path = os.path.join(dump_base_path, str(time.time()))
