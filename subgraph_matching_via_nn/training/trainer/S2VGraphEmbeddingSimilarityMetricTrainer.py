@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple
-
+import copy
 import torch
 import torch_geometric as tg
 
@@ -25,7 +25,7 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
     def __convert_annotated_graph_into_s2vgraph(self, annotated_graph: AnnotatedGraph):
         # use caching
         if annotated_graph in self.annotated_graph_to_converted_s2v_graph_map:
-            return self.annotated_graph_to_converted_s2v_graph_map[annotated_graph]
+            return copy.deepcopy(self.annotated_graph_to_converted_s2v_graph_map[annotated_graph])
 
         # nx.Graph -> S2VGraph
         s2v_graph = S2VGraph(annotated_graph.g, label=None)
