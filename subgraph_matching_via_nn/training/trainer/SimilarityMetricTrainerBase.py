@@ -1,10 +1,10 @@
 import abc
 import copy
-import itertools as it
 import math
 import os
+import sys
 import time
-from typing import Dict, Tuple, List, TypeVar, Any
+from typing import Dict, Tuple, List, TypeVar
 import torch_geometric as tg
 import numpy as np
 import torch
@@ -12,17 +12,72 @@ from livelossplot import PlotLosses
 from matplotlib import pyplot as plt
 from torch.utils.data import WeightedRandomSampler
 from tqdm import tqdm
-
+from powerful_gnns.models.graphcnn import GraphCNN
 from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import BaseGraphMetricNetwork
 from subgraph_matching_via_nn.training.MarginLoss import MarginLoss
 from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
 from subgraph_matching_via_nn.training.localization_grad_distance import LocalizationGradDistance
 from subgraph_matching_via_nn.training.losses import get_pairs_batch_aggregated_distance
-from subgraph_matching_via_nn.training.trainer.PairSampleInfo_with_S2VGraphs import PairSampleInfo_with_S2VGraphs
+from subgraph_matching_via_nn.training.trainer.dataset_partitioning import average_gradients, partition_dataset
+
+import torch.distributed as dist
+import torch.multiprocessing as mp
 
 
 class SimilarityMetricTrainerBase(abc.ABC):
+
+    @staticmethod
+    def init_process(rank, size, fn, device_id, use_existing_data_loaders, train_samples_list,
+                 val_samples_list, new_samples_amount, backend='gloo'):
+        """ Initialize the distributed environment. """
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '29500'
+        dist.init_process_group(backend, rank=rank, world_size=size)
+
+        fn(device_id, use_existing_data_loaders, train_samples_list,
+                 val_samples_list, new_samples_amount)
+
+    def reset_modules_parameters(self, device_id):
+        torch.manual_seed(1234)
+
+        # reset tensor values before creating new process,
+        # as the combination with CUDA usage sets them to zero for some reason,
+        # see https://discuss.pytorch.org/t/multiprocessing-cause-models-parameters-all-become-to-0-0/148183
+        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False,
+                                               device=device_id)
+
+        gnn_model = self.graph_similarity_module.embedding_networks[0].gnn_model
+        gnn_model.load_state_dict(torch.load(
+            self.original_model_path,
+            map_location=torch.device(device_id)))
+        self.graph_similarity_module.to(device_id).requires_grad_(True)
+        gnn_model.move_buffers_to_device()
+
+    def run(self, device_id, use_existing_data_loaders, train_samples_list, val_samples_list, new_samples_amount):
+        self.device = device_id
+        self.reset_modules_parameters(device_id)
+
+        if not use_existing_data_loaders:
+            train_loader, val_loader = self.get_data_loaders(train_samples_list,
+                                                             val_samples_list,
+                                                             new_samples_amount)
+            self.previous_train_loader = train_loader
+            self.previous_val_loader = val_loader
+            print("Data loaders were built")
+        else:
+            train_loader = self.previous_train_loader
+            val_loader = self.previous_val_loader
+            print("Using existing data loaders")
+        dump_base_path = self.dump_base_path
+
+        dump_path = os.path.join(dump_base_path, f"{str(time.time())}_{dist.get_rank()}")
+        if not os.path.exists(dump_base_path):
+            os.makedirs(dump_base_path)
+        os.mkdir(dump_path)
+
+        return self._train_loop(self.graph_similarity_module, train_loader, val_loader,
+                                dump_path=dump_path)
 
     def __init__(self, graph_similarity_module: BaseGraphMetricNetwork, dump_base_path: str,
                  problem_params: Dict, solver_params: Dict):
@@ -55,19 +110,34 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_loss_function = MarginLoss(
             solver_params['margin_loss_margin_value'])
 
-        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False,
-                                               device=self.device)
+        self.stub_grad_distance = None
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
         self.previous_train_loader = None
         self.previous_val_loader = None
 
-    def _save_model(self, model, dump_path):
+        dump_base_path = f".{os.sep}mp"
+        dump_path = os.path.join(dump_base_path, str(time.time()))
+        if not os.path.exists(dump_base_path):
+            os.makedirs(dump_base_path)
+        os.mkdir(dump_path)
+        original_model_file_name = "original_model.pt"
+
+        model = GraphCNN(num_layers=5, num_mlp_layers=2, input_dim=1, hidden_dim=64, output_dim=2,
+                         final_dropout=0.5, learn_eps=False, graph_pooling_type="sum", neighbor_pooling_type="sum",
+                         device='cpu')
+
+        self._save_model(model, dump_path, original_model_file_name)
+
+        self.original_model_path = os.path.join(dump_path, original_model_file_name)
+
+
+    def _save_model(self, model, dump_path, file_name='best_model_state_dict.pt'):
         model_state_dict = copy.deepcopy(model.state_dict())
         if dump_path is not None:
             torch.save(model_state_dict,
-                       os.path.join(dump_path, 'best_model_state_dict.pt'))
+                       os.path.join(dump_path, file_name))
         return model_state_dict
 
     def _save_model_stats(self, model, dump_path, all_train_losses, all_val_losses):
@@ -87,6 +157,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.get_params_list(), self.max_grad_norm)
+        average_gradients(model)
+
         self.opt.step()
         self.lrs.step()
 
@@ -118,14 +190,17 @@ class SimilarityMetricTrainerBase(abc.ABC):
         # train_loader = tg.data.DataLoader(train_set_with_sampler_labels,
         #                                   batch_size=self.batch_size, sampler=data_sampler)
 
-        train_loader = tg.data.DataLoader(train_set, batch_size=self.batch_size)
+        partition, bsz = partition_dataset(train_set, self.batch_size)
+        train_loader = tg.loader.DataLoader(partition,
+                                                batch_size=bsz,
+                                                shuffle=True)
         train_loader.collate_fn = collate_func
         # train_loader.num_workers = 4 * 1
         # if self.device != "cpu":
         #     train_loader.pin_memory = True
 
         if len(validation_set) != 0:
-          val_loader = tg.data.DataLoader(validation_set, batch_size=self.batch_size)
+          val_loader = tg.loader.DataLoader(validation_set, batch_size=self.batch_size)
           val_loader.collate_fn = collate_func
         # val_loader.num_workers = 4 * 1
         # if self.device != "cpu":
@@ -135,7 +210,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         
         return train_loader, val_loader
 
-    def train(self, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
+    def train(self, processes_device_ids, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
         """
         Train graph descriptor (model)
         Args:
@@ -150,32 +225,27 @@ class SimilarityMetricTrainerBase(abc.ABC):
         """
         self.graph_similarity_module.train()
 
-        
-        if not use_existing_data_loaders:
-            train_loader, val_loader = self.get_data_loaders(train_samples_list,
-                                                             val_samples_list,
-                                                             new_samples_amount)
-            self.previous_train_loader = train_loader
-            self.previous_val_loader = val_loader
-            print("Data loaders were built")
-        else:
-            train_loader = self.previous_train_loader
-            val_loader = self.previous_val_loader
-            print("Using existing data loaders")                                                      
-        dump_base_path = self.dump_base_path
+        size = len(processes_device_ids)
+        processes = []
 
-        dump_path = os.path.join(dump_base_path, str(time.time()))
-        if not os.path.exists(dump_base_path):
-            os.makedirs(dump_base_path)
-        os.mkdir(dump_path)
+        for rank, device_id in enumerate(processes_device_ids):
+            p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
+                           args=(rank, size, self.run, device_id, use_existing_data_loaders, train_samples_list,
+                 val_samples_list, new_samples_amount))
+            p.start()
+            processes.append(p)
 
-        return self._train_loop(self.graph_similarity_module, train_loader, val_loader,
-                                dump_path=dump_path)
+        for i, p in enumerate(processes):
+            p.join()
+            print(f"process #{i} finished")
 
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
     def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, dump_path=None):
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+
         all_train_losses = []
         all_val_losses = []
 
@@ -190,6 +260,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
         successive_convergence_epoch_ctr = 0
         best_val_loss = float('inf')
         train_loss_successive_convergence_counter = 0
+
+        actual_batch_size = train_loader.batch_size
+        num_batches = math.ceil(len(train_loader.dataset) / float(actual_batch_size))
 
         while (self.max_epochs is None) or (epoch_ctr < self.max_epochs):
             # init epoch state
@@ -211,6 +284,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 self.optimization_step(model, train_loss)
 
             epoch_train_loss = epoch_train_loss.item()
+
+            print('Rank ', rank, ', epoch ',
+                  epoch_ctr, ': ', epoch_train_loss / num_batches)
+            sys.stdout.flush()
 
             if val_loader is None:
                 epoch_val_loss = epoch_train_loss
@@ -241,27 +318,30 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 # save updated best model (with stats) post epoch
                 # self._save_model_stats(model, dump_path, all_train_losses, all_val_losses)
 
-            if self.train_loss_convergence_threshold is None:
-                # check convergence in case relying on validation loss
-                if epoch_val_loss >= best_val_loss:
-                    successive_convergence_epoch_ctr += 1
-                    if successive_convergence_epoch_ctr > self.cycle_patience * (
-                            self.step_size_up + self.step_size_down):
-                        model.load_state_dict(best_model_state_dict)
-                        return all_train_losses, all_val_losses
+            # avoid deadlock when there are multiple processes -> make sure all processes finish together epoch wise
+            if world_size == 1:
+                if self.train_loss_convergence_threshold is None:
+                    # check convergence in case relying on validation loss
+                    if epoch_val_loss >= best_val_loss:
+                        successive_convergence_epoch_ctr += 1
+                        if successive_convergence_epoch_ctr > self.cycle_patience * (
+                                self.step_size_up + self.step_size_down):
+                            model.load_state_dict(best_model_state_dict)
+                            return all_train_losses, all_val_losses
+                    else:
+                        # found better val loss
+                        successive_convergence_epoch_ctr = 0
+                        best_model_state_dict = self._save_model(model, dump_path)
                 else:
-                    # found better val loss
-                    successive_convergence_epoch_ctr = 0
-                    best_model_state_dict = self._save_model(model, dump_path)
-            else:
-                # check convergence in case relying on train loss
-                if epoch_train_loss <= self.train_loss_convergence_threshold:
-                    train_loss_successive_convergence_counter += 1
-                    if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                        _ = self._save_model(model, dump_path)
-                        return all_train_losses, all_val_losses
-                else:
-                    train_loss_successive_convergence_counter = 0
+                    # check convergence in case relying on train loss
+                    if epoch_train_loss <= self.train_loss_convergence_threshold:
+                        train_loss_successive_convergence_counter += 1
+                        if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
+                            _ = self._save_model(model, dump_path)
+                            return all_train_losses, all_val_losses
+                    else:
+                        train_loss_successive_convergence_counter = 0
+        return all_train_losses, all_val_losses
 
     def create_data_sampler(self, train_set, new_examples_set_size):
         n = len(train_set)
