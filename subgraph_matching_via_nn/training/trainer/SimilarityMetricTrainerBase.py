@@ -183,21 +183,20 @@ class SimilarityMetricTrainerBase(abc.ABC):
         #
         # train_loader = tg.data.DataLoader(train_set_with_sampler_labels,
         #                                   batch_size=self.batch_size, sampler=data_sampler)
+        num_workers = 0 #self.solver_params['num_workers']
 
         partition, bsz = partition_dataset(train_set, self.batch_size)
         train_loader = tg.loader.DataLoader(partition,
                                                 batch_size=bsz,
-                                                shuffle=True)
+                                                shuffle=True, num_workers=num_workers)
         train_loader.collate_fn = collate_func
-        # train_loader.num_workers = 4 * 1
-        # if self.device != "cpu":
+        # if self.device == "cpu":
         #     train_loader.pin_memory = True
 
         if len(validation_set) != 0:
-          val_loader = tg.loader.DataLoader(validation_set, batch_size=self.batch_size)
+          val_loader = tg.loader.DataLoader(validation_set, batch_size=self.batch_size, num_workers=num_workers)
           val_loader.collate_fn = collate_func
-        # val_loader.num_workers = 4 * 1
-        # if self.device != "cpu":
+        # if self.device == "cpu":
         #     val_loader.pin_memory = True
         else:
           val_loader = None
