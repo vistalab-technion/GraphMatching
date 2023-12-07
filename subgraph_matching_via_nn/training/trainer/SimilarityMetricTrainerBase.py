@@ -23,6 +23,7 @@ from subgraph_matching_via_nn.training.trainer.dataset_partitioning import avera
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 class SimilarityMetricTrainerBase(abc.ABC):
