@@ -364,12 +364,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
                 # train loss
                 train_loss = self.calculate_loss_for_batch(train_batch, is_train=True)
-                epoch_train_loss += train_loss
+                epoch_train_loss += train_loss.item()
 
                 # optimization step
                 self.optimization_step(model, train_loss)
-
-            epoch_train_loss = epoch_train_loss.item()
 
             # print('Rank ', rank, ', epoch ',
             #       epoch_ctr, ': ', epoch_train_loss / num_batches)
