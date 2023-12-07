@@ -358,7 +358,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             # print('Rank ', rank, ', epoch ',
             #       epoch_ctr)
             for train_batch in train_loader:
-                # print('Rank ', rank, f", Batch #{batch_index}")
+                print('Rank ', rank, f", Batch #{batch_index}")
                 batch_index += 1
 
                 # train loss
