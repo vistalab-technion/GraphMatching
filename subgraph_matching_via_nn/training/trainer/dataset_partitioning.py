@@ -34,6 +34,13 @@ class DataPartitioner(object):
             self.partitions.append(indexes[0:part_len])
             indexes = indexes[part_len:]
 
+        left_out_elements_amount = len(indexes)
+        if left_out_elements_amount > 0:
+            # we ensure equal partitions, to avoid a scenario in which workers have different number of batches,
+            # resulting in deadlocks
+            print(f"Data partitioner leaves out {left_out_elements_amount} elements of the data. "
+                  "To make better usage of the data, try to adjust number of workers or the length of the data")
+
     def use(self, partition):
         return Partition(self.data, self.partitions[partition])
 

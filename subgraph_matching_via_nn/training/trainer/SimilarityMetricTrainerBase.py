@@ -26,16 +26,17 @@ import torch.multiprocessing as mp
 
 
 class SimilarityMetricTrainerBase(abc.ABC):
+    SENTINEL = 'SENTINEL'
 
     @staticmethod
-    def init_process(rank, size, fn, device_id, use_existing_data_loaders, train_samples_list,
+    def init_process(rank, size, fn, q, device_id, use_existing_data_loaders, train_samples_list,
                  val_samples_list, new_samples_amount, backend='gloo'):
         """ Initialize the distributed environment. """
         os.environ['MASTER_ADDR'] = '127.0.0.1'
         os.environ['MASTER_PORT'] = '29500'
         dist.init_process_group(backend, rank=rank, world_size=size)
 
-        fn(device_id, use_existing_data_loaders, train_samples_list,
+        fn(device_id, q, use_existing_data_loaders, train_samples_list,
                  val_samples_list, new_samples_amount)
 
     def reset_modules_parameters(self, device_id):
@@ -54,7 +55,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_module.to(device_id).requires_grad_(True)
         gnn_model.move_buffers_to_device()
 
-    def run(self, device_id, use_existing_data_loaders, train_samples_list, val_samples_list, new_samples_amount):
+    def _training_worker_run_func(self, device_id, q, use_existing_data_loaders, train_samples_list, val_samples_list, new_samples_amount):
         self.device = device_id
         self.reset_modules_parameters(device_id)
 
@@ -69,15 +70,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
             train_loader = self.previous_train_loader
             val_loader = self.previous_val_loader
             print("Using existing data loaders")
-        dump_base_path = self.dump_base_path
 
-        dump_path = os.path.join(dump_base_path, f"{str(time.time())}_{dist.get_rank()}")
-        if not os.path.exists(dump_base_path):
-            os.makedirs(dump_base_path)
-        os.mkdir(dump_path)
-
-        return self._train_loop(self.graph_similarity_module, train_loader, val_loader,
-                                dump_path=dump_path)
+        return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
     def __init__(self, graph_similarity_module: BaseGraphMetricNetwork, dump_base_path: str,
                  problem_params: Dict, solver_params: Dict):
@@ -227,42 +221,132 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         size = len(processes_device_ids)
         processes = []
+        queues = []
 
         for rank, device_id in enumerate(processes_device_ids):
+            q = mp.Queue()
             p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
-                           args=(rank, size, self.run, device_id, use_existing_data_loaders, train_samples_list,
-                 val_samples_list, new_samples_amount))
+                           args=(rank, size, self._training_worker_run_func, q, device_id, use_existing_data_loaders,
+                                 train_samples_list, val_samples_list, new_samples_amount))
             p.start()
+
+            queues.append(q)
             processes.append(p)
+
+        dump_base_path = self.dump_base_path
+        dump_path = os.path.join(dump_base_path, f"{str(time.time())}")
+        if not os.path.exists(dump_base_path):
+            os.makedirs(dump_base_path)
+        os.mkdir(dump_path)
+
+        self.monitoring_training(queues, dump_path)
 
         for i, p in enumerate(processes):
             p.join()
-            print(f"process #{i} finished")
+            print(f"training worker process #{i} finished")
+        print("finished monitoring training")
+
+    def monitoring_training(self, queues, dump_path=None):
+        all_train_losses = []
+        all_val_losses = []
+        successive_convergence_epoch_ctr = 0
+        train_loss_successive_convergence_counter = 0
+        epoch_ctr = 0
+        best_val_loss = float('inf')
+
+        liveloss = PlotLosses(mode='notebook')
+        n_queues = len(queues)
+
+        while True:
+            epoch_train_loss = 0
+            epoch_val_loss = 0
+            last_monitoring_update_list = None
+            monitoring_update_lists = []
+
+            for q in queues:
+                last_monitoring_update_list = q.get()
+
+                if last_monitoring_update_list == SimilarityMetricTrainerBase.SENTINEL:
+                    print(f"Monitoring process is exiting, epochs={epoch_ctr}")
+                    break
+                monitoring_update_lists.append(last_monitoring_update_list)
+
+            if last_monitoring_update_list == SimilarityMetricTrainerBase.SENTINEL:
+                break
+
+            update_list_size = len(monitoring_update_lists)
+            for update_list_index in range(update_list_size):
+                for q_index in range(n_queues):
+
+                    worker_train_loss, worker_val_loss = monitoring_update_lists[q_index][update_list_index]
+                    epoch_train_loss += worker_train_loss
+                    epoch_val_loss += worker_val_loss
+
+                    epoch_ctr += 1
+                    all_train_losses += [epoch_train_loss]
+                    all_val_losses += [epoch_val_loss]
+
+                    if epoch_val_loss < best_val_loss:
+                        best_val_loss = epoch_val_loss
+
+                    if epoch_ctr % self.solver_params['k_update_plot'] == 0:
+                        # self.plot_current_loss_history(all_train_losses, all_val_losses, start_time, epoch_ctr,
+                        #                           best_val_loss, dump_path)
+
+                        print(f"finished epoch {epoch_ctr} best_val_loss = {best_val_loss}")
+                        liveloss.update({'epoch train loss': epoch_train_loss})
+                        liveloss.send()
+
+                        # save updated best model (with stats) post epoch
+                        # self._save_model_stats(model, dump_path, all_train_losses, all_val_losses)
+
+                    if self.train_loss_convergence_threshold is None:
+                        # check convergence in case relying on validation loss
+                        if epoch_val_loss >= best_val_loss:
+                            successive_convergence_epoch_ctr += 1
+                            if successive_convergence_epoch_ctr > self.cycle_patience * (
+                                    self.step_size_up + self.step_size_down):
+                                # model.load_state_dict(best_model_state_dict) #TODO
+                                return all_train_losses, all_val_losses
+                        else:
+                            # found better val loss
+                            successive_convergence_epoch_ctr = 0
+                            # best_model_state_dict = self._save_model(model, dump_path) #TODO
+                    else:
+                        # check convergence in case relying on train loss
+                        if epoch_train_loss <= self.train_loss_convergence_threshold:
+                            train_loss_successive_convergence_counter += 1
+                            if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
+                                # _ = self._save_model(model, dump_path) #TODO - model should be tracked, but avoid sending it between process (too heavy)
+                                return all_train_losses, all_val_losses
+                        else:
+                            train_loss_successive_convergence_counter = 0
+
+        return all_train_losses, all_val_losses
+
+    def __terminate_worker_process(self, q):
+        print("worker process is terminating")
+        sys.stdout.flush()
+        q.put(SimilarityMetricTrainerBase.SENTINEL)
 
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
-    def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, dump_path=None):
+    def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, q):
         rank = dist.get_rank()
-        world_size = dist.get_world_size()
-
-        all_train_losses = []
-        all_val_losses = []
+        monitoring_update_epochs_pace = self.solver_params['train_monitoring_epochs_pace']
 
         # define optimizer and scheduler
         if not self.init_optimizer(model):
-            return all_train_losses, all_val_losses
+            self.__terminate_worker_process(q)
+            return
 
         # init loop state
-        liveloss = PlotLosses(mode='notebook')
-        tqdm.write(f'dump path: {dump_path}')
         epoch_ctr = 0
-        successive_convergence_epoch_ctr = 0
-        best_val_loss = float('inf')
-        train_loss_successive_convergence_counter = 0
+        # actual_batch_size = train_loader.batch_size
+        # num_batches = math.ceil(len(train_loader.dataset) / float(actual_batch_size))
 
-        actual_batch_size = train_loader.batch_size
-        num_batches = math.ceil(len(train_loader.dataset) / float(actual_batch_size))
+        monitoring_update_list = []
 
         while (self.max_epochs is None) or (epoch_ctr < self.max_epochs):
             # init epoch state
@@ -272,8 +356,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
             epoch_train_loss = 0
             epoch_val_loss = 0
 
+            # print('Rank ', rank, ', epoch ',
+            #       epoch_ctr)
             for train_batch in train_loader:
-                print(f"Batch #{batch_index}")
+                # print('Rank ', rank, f", Batch #{batch_index}")
                 batch_index += 1
 
                 # train loss
@@ -285,9 +371,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
             epoch_train_loss = epoch_train_loss.item()
 
-            print('Rank ', rank, ', epoch ',
-                  epoch_ctr, ': ', epoch_train_loss / num_batches)
-            sys.stdout.flush()
+            # print('Rank ', rank, ', epoch ',
+            #       epoch_ctr, ': ', epoch_train_loss / num_batches)
+            # sys.stdout.flush()
 
             if val_loader is None:
                 epoch_val_loss = epoch_train_loss
@@ -296,52 +382,19 @@ class SimilarityMetricTrainerBase(abc.ABC):
                     # validation loss
                     val_loss = self.calculate_loss_for_batch(val_batch,
                                                              is_train=False)
-                    epoch_val_loss += val_loss
-
-                epoch_val_loss = epoch_val_loss.item()
-
-            all_train_losses += [epoch_train_loss]
-            all_val_losses += [epoch_val_loss]
-
-            if epoch_val_loss < best_val_loss:
-                best_val_loss = epoch_val_loss
-
-            # plot
-            # self.plot_current_loss_history(all_train_losses, all_val_losses, start_time, epoch_ctr,
-            #                           best_val_loss, dump_path)
-
-            if epoch_ctr % self.solver_params['k_update_plot'] == 0:
-                print(f"finished epoch {epoch_ctr} best_val_loss = {best_val_loss}")
-                liveloss.update({'epoch train loss': epoch_train_loss})
-                liveloss.send()
-
-                # save updated best model (with stats) post epoch
-                # self._save_model_stats(model, dump_path, all_train_losses, all_val_losses)
+                    epoch_val_loss += val_loss.item()
 
             # avoid deadlock when there are multiple processes -> make sure all processes finish together epoch wise
-            if world_size == 1:
-                if self.train_loss_convergence_threshold is None:
-                    # check convergence in case relying on validation loss
-                    if epoch_val_loss >= best_val_loss:
-                        successive_convergence_epoch_ctr += 1
-                        if successive_convergence_epoch_ctr > self.cycle_patience * (
-                                self.step_size_up + self.step_size_down):
-                            model.load_state_dict(best_model_state_dict)
-                            return all_train_losses, all_val_losses
-                    else:
-                        # found better val loss
-                        successive_convergence_epoch_ctr = 0
-                        best_model_state_dict = self._save_model(model, dump_path)
-                else:
-                    # check convergence in case relying on train loss
-                    if epoch_train_loss <= self.train_loss_convergence_threshold:
-                        train_loss_successive_convergence_counter += 1
-                        if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                            _ = self._save_model(model, dump_path)
-                            return all_train_losses, all_val_losses
-                    else:
-                        train_loss_successive_convergence_counter = 0
-        return all_train_losses, all_val_losses
+            monitoring_update_list.append((epoch_train_loss, epoch_val_loss))
+            if epoch_ctr % monitoring_update_epochs_pace == 0:
+                q.put(monitoring_update_list)
+                monitoring_update_list = []
+
+        if len(monitoring_update_list) != 0:
+            q.put(monitoring_update_list)
+
+        print("rank", rank, ", epochs trained: ", epoch_ctr)
+        self.__terminate_worker_process(q)
 
     def create_data_sampler(self, train_set, new_examples_set_size):
         n = len(train_set)
