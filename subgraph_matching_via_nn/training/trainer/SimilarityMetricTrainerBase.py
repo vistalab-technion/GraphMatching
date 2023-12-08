@@ -292,7 +292,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             if last_monitoring_update_list == SimilarityMetricTrainerBase.SENTINEL:
                 break
 
-            update_list_size = len(monitoring_update_lists)
+            update_list_size = len(monitoring_update_lists[0])
             for update_list_index in range(update_list_size):
                 for q_index in range(n_queues):
 
