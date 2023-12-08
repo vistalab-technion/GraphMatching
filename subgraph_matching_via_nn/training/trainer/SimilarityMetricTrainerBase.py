@@ -109,8 +109,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
-        self.previous_train_loader = None
-        self.previous_val_loader = None
+        self.previous_train_loaders = None
+        self.previous_val_loaders = None
 
         dump_base_path = f".{os.sep}mp"
         dump_path = os.path.join(dump_base_path, str(time.time()))
