@@ -63,8 +63,11 @@ class SimilarityMetricTrainerBase(abc.ABC):
         with open(train_loader_path, 'rb') as file:
             train_loader = pickle.load(file)
 
-        with open(val_loader_path, 'rb') as file:
-            val_loader = pickle.load(file)
+        if val_loader_path is None:
+            val_loader = None
+        else:
+            with open(val_loader_path, 'rb') as file:
+                val_loader = pickle.load(file)
 
         # if self.device == "cpu":
         #     train_loader.pin_memory = True
@@ -75,10 +78,11 @@ class SimilarityMetricTrainerBase(abc.ABC):
             for pair in batch:
                 for s2v_graph in pair.s2v_graphs:
                     s2v_graph.to(device=self.device)
-        for batch in val_loader:
-            for pair in batch:
-                for s2v_graph in pair.s2v_graphs:
-                    s2v_graph.to(device=self.device)
+        if val_loader is not None:
+            for batch in val_loader:
+                for pair in batch:
+                    for s2v_graph in pair.s2v_graphs:
+                        s2v_graph.to(device=self.device)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
