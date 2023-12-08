@@ -2,6 +2,7 @@ import abc
 import copy
 import math
 import os
+import pickle
 import sys
 import time
 from typing import Dict, Tuple, List, TypeVar
@@ -55,9 +56,16 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_module.to(device_id).requires_grad_(True)
         gnn_model.move_buffers_to_device()
 
-    def _training_worker_run_func(self, device_id, q, train_loader, val_loader):
+    def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
         self.reset_modules_parameters(device_id)
+
+        with open(train_loader_path, 'rb') as file:
+            train_loader = pickle.load(file)
+
+        with open(val_loader_path, 'rb') as file:
+            val_loader = pickle.load(file)
+
         # if self.device == "cpu":
         #     train_loader.pin_memory = True
         # if val_loader is not None:
@@ -109,8 +117,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
-        self.previous_train_loaders = None
-        self.previous_val_loaders = None
+        self.previous_train_loader_paths = None
+        self.previous_val_loader_paths = None
 
         dump_base_path = f".{os.sep}mp"
         dump_path = os.path.join(dump_base_path, str(time.time()))
@@ -210,6 +218,24 @@ class SimilarityMetricTrainerBase(abc.ABC):
         
         return train_data_loaders, val_data_loaders
 
+    def __save_dataloaders_locally(self, dataloader_list):
+        dl_paths = []
+
+        dump_base_path = f".{os.sep}dataloaders"
+        if not os.path.exists(dump_base_path):
+            os.makedirs(dump_base_path)
+
+        for dataloader in dataloader_list:
+            dl_path = os.path.join(dump_base_path, f"{str(time.time())}.p")
+            with open(dl_path, 'wb') as f:
+                pickle.dump(dataloader, f)
+            dl_paths.append(dl_path)
+        return dl_paths
+
+    def set_existing_data_loader_paths(self, train_dataloader_paths, val_dataloader_paths):
+        self.previous_train_loader_paths = train_dataloader_paths
+        self.previous_val_loader_paths = val_dataloader_paths
+
     def train(self, processes_device_ids, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
         """
         Train graph descriptor (model)
@@ -232,20 +258,24 @@ class SimilarityMetricTrainerBase(abc.ABC):
         if not use_existing_data_loaders:
             train_loaders, val_loaders = self.get_data_loaders(train_samples_list, val_samples_list,
                                                              new_samples_amount, processes_device_ids)
-            self.previous_train_loaders = train_loaders
-            self.previous_val_loaders = val_loaders
-            print("Data loaders were built")
+            self.previous_train_loader_paths = self.__save_dataloaders_locally(train_loaders)
+            self.previous_val_loader_paths = self.__save_dataloaders_locally(val_loaders)
+
+            # clear memory
+            train_loaders = val_loaders = None
+            train_samples_list = val_samples_list = None
+            torch.cuda.empty_cache()
+            print("Data loaders were built and saved locally")
         else:
-            train_loaders = self.previous_train_loaders
-            val_loaders = self.previous_val_loaders
             print("Using existing data loaders")
 
         for rank, device_id in enumerate(processes_device_ids):
-            train_loader = train_loaders[rank]
-            val_loader = val_loaders[rank]
+            train_loader_path = self.previous_train_loader_paths[rank]
+            val_loader_path = self.previous_val_loader_paths[rank]
             q = mp.Queue()
             p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
-                           args=(rank, size, self._training_worker_run_func, q, device_id, train_loader, val_loader))
+                           args=(rank, size, self._training_worker_run_func, q, device_id,
+                                 train_loader_path, val_loader_path))
             p.start()
 
             queues.append(q)
