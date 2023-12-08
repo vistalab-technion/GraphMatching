@@ -36,7 +36,6 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
         # need to override the node_features
         s2v_graph = batch_graph[0]
         s2v_graph.node_features = annotated_graph.node_indicator
-        s2v_graph.to(device=self.device)
 
         self.annotated_graph_to_converted_s2v_graph_map[annotated_graph] = s2v_graph
 
@@ -50,19 +49,20 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
              ) for pair_sample_info in pair_sample_info_list]
 
     def get_data_loaders(self, train_set: List[Pair_Sample_Info], val_set: List[Pair_Sample_Info],
-                         new_samples_amount) -> (tg.data.DataLoader, tg.data.DataLoader):
+                         new_samples_amount, device_ids) -> (tg.data.DataLoader, tg.data.DataLoader):
         train_s2vgraph_tuple_list = self.__convert_pair_sample_info_list_to_s2vgraph_tuple_list(train_set)
         val_s2vgraph_tuple_list = self.__convert_pair_sample_info_list_to_s2vgraph_tuple_list(val_set)
 
         combined_types_train_set = [PairSampleInfo_with_S2VGraphs(pair_sample_info, s2v_graphs) for pair_sample_info, s2v_graphs in zip(train_set, train_s2vgraph_tuple_list)]
         combined_types_val_set = [PairSampleInfo_with_S2VGraphs(pair_sample_info, s2v_graphs) for pair_sample_info, s2v_graphs in zip(val_set, val_s2vgraph_tuple_list)]
 
-        train_loader, val_loader = self._build_data_loaders(combined_types_train_set, combined_types_val_set,
-                                                            S2VGraphEmbeddingSimilarityMetricTrainer.custom_collate)
+        train_loaders, val_loaders = self._build_data_loaders(combined_types_train_set, combined_types_val_set,
+                                                            S2VGraphEmbeddingSimilarityMetricTrainer.custom_collate,
+                                                            device_ids)
 
         self.annotated_graph_to_converted_s2v_graph_map = {}
 
-        return train_loader, val_loader
+        return train_loaders, val_loaders
 
     @staticmethod
     def custom_collate(samples_batch):

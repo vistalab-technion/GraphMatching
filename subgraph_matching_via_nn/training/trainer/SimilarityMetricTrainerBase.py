@@ -19,7 +19,8 @@ from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
 from subgraph_matching_via_nn.training.localization_grad_distance import LocalizationGradDistance
 from subgraph_matching_via_nn.training.losses import get_pairs_batch_aggregated_distance
-from subgraph_matching_via_nn.training.trainer.dataset_partitioning import average_gradients, partition_dataset
+from subgraph_matching_via_nn.training.trainer.dataset_partitioning import average_gradients, partition_dataset, \
+    split_dataset
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -30,15 +31,13 @@ class SimilarityMetricTrainerBase(abc.ABC):
     SENTINEL = 'SENTINEL'
 
     @staticmethod
-    def init_process(rank, size, fn, q, device_id, use_existing_data_loaders, train_samples_list,
-                 val_samples_list, new_samples_amount, backend='gloo'):
+    def init_process(rank, size, fn, q, device_id, train_loader, val_loader, backend='gloo'):
         """ Initialize the distributed environment. """
         os.environ['MASTER_ADDR'] = '127.0.0.1'
         os.environ['MASTER_PORT'] = '29500'
         dist.init_process_group(backend, rank=rank, world_size=size)
 
-        fn(device_id, q, use_existing_data_loaders, train_samples_list,
-                 val_samples_list, new_samples_amount)
+        fn(device_id, q, train_loader, val_loader)
 
     def reset_modules_parameters(self, device_id):
         torch.manual_seed(1234)
@@ -56,21 +55,22 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_module.to(device_id).requires_grad_(True)
         gnn_model.move_buffers_to_device()
 
-    def _training_worker_run_func(self, device_id, q, use_existing_data_loaders, train_samples_list, val_samples_list, new_samples_amount):
+    def _training_worker_run_func(self, device_id, q, train_loader, val_loader):
         self.device = device_id
         self.reset_modules_parameters(device_id)
+        # if self.device == "cpu":
+        #     train_loader.pin_memory = True
+        # if val_loader is not None:
+        #     val_loader.pin_memory = True
 
-        if not use_existing_data_loaders:
-            train_loader, val_loader = self.get_data_loaders(train_samples_list,
-                                                             val_samples_list,
-                                                             new_samples_amount)
-            self.previous_train_loader = train_loader
-            self.previous_val_loader = val_loader
-            print("Data loaders were built")
-        else:
-            train_loader = self.previous_train_loader
-            val_loader = self.previous_val_loader
-            print("Using existing data loaders")
+        for batch in train_loader:
+            for pair in batch:
+                for s2v_graph in pair.s2v_graphs:
+                    s2v_graph.to(device=self.device)
+        for batch in val_loader:
+            for pair in batch:
+                for s2v_graph in pair.s2v_graphs:
+                    s2v_graph.to(device=self.device)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
@@ -177,32 +177,38 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         return True
 
-    def _build_data_loaders(self, train_set, validation_set, collate_func):
+    def __create_data_loaders_lists(self, full_data_set, collate_func, device_ids):
+        n_partitions = len(device_ids)
+        num_workers = 0  # self.solver_params['num_workers']
+        data_loaders = []
+
+        datasets, bsz = split_dataset(full_data_set, self.batch_size, n_partitions)
+        for dataset in datasets:
+            loader = tg.loader.DataLoader(dataset, batch_size=bsz, shuffle=True, num_workers=num_workers)
+            loader.collate_fn = collate_func
+            data_loaders.append(loader)
+
+        return data_loaders
+
+    def _build_data_loaders(self, train_set, validation_set, collate_func, device_ids):
         # TODO: this code is for supporting new samples, but it messes up overfitting a small dataset (loss is unstable)
         # data_sampler, train_set_with_sampler_labels = self.create_data_sampler(
         #     train_set, new_samples_amount)
         #
         # train_loader = tg.data.DataLoader(train_set_with_sampler_labels,
         #                                   batch_size=self.batch_size, sampler=data_sampler)
-        num_workers = 0 #self.solver_params['num_workers']
 
-        partition, bsz = partition_dataset(train_set, self.batch_size)
-        train_loader = tg.loader.DataLoader(partition,
-                                                batch_size=bsz,
-                                                shuffle=True, num_workers=num_workers)
-        train_loader.collate_fn = collate_func
-        # if self.device == "cpu":
-        #     train_loader.pin_memory = True
+        n_partitions = len(device_ids)
 
+        train_data_loaders = self.__create_data_loaders_lists(train_set, collate_func, device_ids)
         if len(validation_set) != 0:
-          val_loader = tg.loader.DataLoader(validation_set, batch_size=self.batch_size, num_workers=num_workers)
-          val_loader.collate_fn = collate_func
-        # if self.device == "cpu":
-        #     val_loader.pin_memory = True
+            val_data_loaders = self.__create_data_loaders_lists(validation_set, collate_func, device_ids)
         else:
-          val_loader = None
+            val_data_loaders = [None for rank in range(n_partitions)]
+
+        # partition, bsz = partition_dataset(train_set, self.batch_size)
         
-        return train_loader, val_loader
+        return train_data_loaders, val_data_loaders
 
     def train(self, processes_device_ids, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
         """
@@ -223,11 +229,23 @@ class SimilarityMetricTrainerBase(abc.ABC):
         processes = []
         queues = []
 
+        if not use_existing_data_loaders:
+            train_loaders, val_loaders = self.get_data_loaders(train_samples_list, val_samples_list,
+                                                             new_samples_amount, processes_device_ids)
+            self.previous_train_loaders = train_loaders
+            self.previous_val_loaders = val_loaders
+            print("Data loaders were built")
+        else:
+            train_loaders = self.previous_train_loaders
+            val_loaders = self.previous_val_loaders
+            print("Using existing data loaders")
+
         for rank, device_id in enumerate(processes_device_ids):
+            train_loader = train_loaders[rank]
+            val_loader = val_loaders[rank]
             q = mp.Queue()
             p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
-                           args=(rank, size, self._training_worker_run_func, q, device_id, use_existing_data_loaders,
-                                 train_samples_list, val_samples_list, new_samples_amount))
+                           args=(rank, size, self._training_worker_run_func, q, device_id, train_loader, val_loader))
             p.start()
 
             queues.append(q)
@@ -500,7 +518,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
     @abc.abstractmethod
     def get_data_loaders(self, train_set: List[Pair_Sample_Info],
-                         val_set: List[Pair_Sample_Info], new_samples_amount) \
+                         val_set: List[Pair_Sample_Info], new_samples_amount: int, device_ids: List[int]) \
             -> (tg.data.DataLoader, tg.data.DataLoader):
         """
         create dataloaders for graph pairs based on graph wrapping data type
@@ -508,6 +526,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             train_set:
             val_set:
             new_samples_amount:
+            device_ids:
 
         Returns:
             train DataLoader and validation DataLoader

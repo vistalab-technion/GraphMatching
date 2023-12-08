@@ -1,6 +1,5 @@
 """ Dataset partitioning helper """
 from random import Random
-import torch
 import torch.distributed as dist
 
 
@@ -41,16 +40,28 @@ class DataPartitioner(object):
             print(f"Data partitioner leaves out {left_out_elements_amount} elements of the data. "
                   "To make better usage of the data, try to adjust number of workers or the length of the data")
 
-    def use(self, partition):
-        return Partition(self.data, self.partitions[partition])
+    def use(self, rank):
+        return Partition(self.data, self.partitions[rank])
+
+    def get_partition_data(self, rank):
+        partition = self.use(rank)
+        return [elem for elem in partition]
 
 
-def partition_dataset(dataset, batch_size):
-    size = dist.get_world_size()
+def split_dataset(dataset, batch_size, size):
     bsz = int(batch_size / float(size))
     partition_sizes = [1.0 / size for _ in range(size)]
     partition = DataPartitioner(dataset, partition_sizes)
-    partition = partition.use(dist.get_rank())
+    return [partition.get_partition_data(rank) for rank in range(size)], bsz
+
+def partition_dataset(dataset, batch_size, rank=None, size=None):
+    if rank is None:
+        rank = dist.get_rank()
+        size = dist.get_world_size()
+    bsz = int(batch_size / float(size))
+    partition_sizes = [1.0 / size for _ in range(size)]
+    partition = DataPartitioner(dataset, partition_sizes)
+    partition = partition.use(rank)
     return partition, bsz
 
 
