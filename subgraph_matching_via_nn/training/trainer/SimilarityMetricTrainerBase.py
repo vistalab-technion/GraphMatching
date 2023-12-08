@@ -373,7 +373,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         return all_train_losses, all_val_losses
 
     def __terminate_worker_process(self, q):
-        print("worker process is terminating")
+        rank = dist.get_rank()
+        print(f"worker process {rank} is terminating at {time.strftime('%H:%M:%S', time.localtime())}")
         sys.stdout.flush()
         q.put(SimilarityMetricTrainerBase.SENTINEL)
 
@@ -382,6 +383,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
     def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, q):
         rank = dist.get_rank()
+        print(f"worker process #{rank} is starting at {time.strftime('%H:%M:%S', time.localtime())}", flush=True)
+
         monitoring_update_epochs_pace = self.solver_params['train_monitoring_epochs_pace']
 
         # define optimizer and scheduler
@@ -407,7 +410,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             # print('Rank ', rank, ', epoch ',
             #       epoch_ctr)
             for train_batch in train_loader:
-                print('Rank ', rank, f", Batch #{batch_index}")
+                print('Rank ', rank, f", Batch #{batch_index}", flush=True)
                 batch_index += 1
 
                 # train loss
