@@ -410,7 +410,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
             # print('Rank ', rank, ', epoch ',
             #       epoch_ctr)
             for train_batch in train_loader:
-                print('Rank ', rank, f", Batch #{batch_index}", flush=True)
+                #print('Rank ', rank, f", Batch #{batch_index}", flush=True)
                 batch_index += 1
 
                 # train loss
@@ -420,9 +420,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 # optimization step
                 self.optimization_step(model, train_loss)
 
-            # print('Rank ', rank, ', epoch ',
-            #       epoch_ctr, ': ', epoch_train_loss / num_batches)
-            # sys.stdout.flush()
+            print('Rank ', rank, ', epoch ', epoch_ctr)
+            #      , ': ', epoch_train_loss / num_batches)
+            sys.stdout.flush()
 
             if val_loader is None:
                 epoch_val_loss = epoch_train_loss
