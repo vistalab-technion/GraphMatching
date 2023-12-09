@@ -20,6 +20,7 @@ from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
 from subgraph_matching_via_nn.training.localization_grad_distance import LocalizationGradDistance
 from subgraph_matching_via_nn.training.losses import get_pairs_batch_aggregated_distance
+from subgraph_matching_via_nn.training.trainer.PairSampleInfo_with_S2VGraphs import PairSampleInfo_with_S2VGraphs
 from subgraph_matching_via_nn.training.trainer.dataset_partitioning import average_gradients, partition_dataset, \
     split_dataset
 
@@ -69,20 +70,20 @@ class SimilarityMetricTrainerBase(abc.ABC):
             with open(val_loader_path, 'rb') as file:
                 val_loader = pickle.load(file)
 
-        # if self.device == "cpu":
-        #     train_loader.pin_memory = True
-        # if val_loader is not None:
-        #     val_loader.pin_memory = True
+        if self.device == "cpu":
+            train_loader.pin_memory = True
+            if val_loader is not None:
+                val_loader.pin_memory = True
 
-        for batch in train_loader:
-            for pair in batch:
-                for s2v_graph in pair.s2v_graphs:
-                    s2v_graph.to(device=self.device)
-        if val_loader is not None:
-            for batch in val_loader:
-                for pair in batch:
-                    for s2v_graph in pair.s2v_graphs:
-                        s2v_graph.to(device=self.device)
+        # for batch in train_loader:
+        #     for pair in batch:
+        #         for s2v_graph in pair.s2v_graphs:
+        #             s2v_graph.to(device=self.device)
+        # if val_loader is not None:
+        #     for batch in val_loader:
+        #         for pair in batch:
+        #             for s2v_graph in pair.s2v_graphs:
+        #                 s2v_graph.to(device=self.device)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
@@ -382,6 +383,17 @@ class SimilarityMetricTrainerBase(abc.ABC):
         sys.stdout.flush()
         q.put(SimilarityMetricTrainerBase.SENTINEL)
 
+    def __move_batch_to_device(self, graphs_batch):
+        new_graphs_batch = [PairSampleInfo_with_S2VGraphs(
+            pair.pair_sample_info,
+            (
+                pair.s2v_graphs[0].to(device=self.device, non_blocking=True),
+                pair.s2v_graphs[1].to(device=self.device, non_blocking=True)
+            )
+        )
+            for pair in graphs_batch]
+        return new_graphs_batch
+
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
@@ -417,6 +429,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 #print('Rank ', rank, f", Batch #{batch_index}", flush=True)
                 batch_index += 1
 
+                train_batch = self.__move_batch_to_device(train_batch)
+
                 # train loss
                 train_loss = self.calculate_loss_for_batch(train_batch, is_train=True)
                 epoch_train_loss += train_loss.item()
@@ -432,6 +446,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 epoch_val_loss = epoch_train_loss
             else:
                 for val_batch in val_loader:
+                    val_batch = self.__move_batch_to_device(val_batch)
                     # validation loss
                     val_loss = self.calculate_loss_for_batch(val_batch,
                                                              is_train=False)
