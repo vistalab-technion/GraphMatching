@@ -38,7 +38,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         os.environ['MASTER_ADDR'] = '127.0.0.1'
         os.environ['MASTER_PORT'] = '29500'
         dist.init_process_group(backend, rank=rank, world_size=size)
-
+        
         fn(device_id, q, train_loader, val_loader)
 
     def reset_modules_parameters(self, device_id):
@@ -75,21 +75,17 @@ class SimilarityMetricTrainerBase(abc.ABC):
             if val_loader is not None:
                 val_loader.pin_memory = True
 
-        # for batch in train_loader:
-        #     for pair in batch:
-        #         for s2v_graph in pair.s2v_graphs:
-        #             s2v_graph.to(device=self.device)
-        # if val_loader is not None:
-        #     for batch in val_loader:
-        #         for pair in batch:
-        #             for s2v_graph in pair.s2v_graphs:
-        #                 s2v_graph.to(device=self.device)
+        for batch in train_loader:
+            self.__move_batch_to_device(batch)
+        if val_loader is not None:
+            
+            for batch in val_loader:
+                self.__move_batch_to_device(batch)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
     def __init__(self, graph_similarity_module: BaseGraphMetricNetwork, dump_base_path: str,
                  problem_params: Dict, solver_params: Dict):
-        # super().__init__()
         self.graph_similarity_module = graph_similarity_module
         self.dump_base_path = dump_base_path
         self.problem_params = problem_params
@@ -218,8 +214,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
             val_data_loaders = self.__create_data_loaders_lists(validation_set, collate_func, device_ids)
         else:
             val_data_loaders = [None for rank in range(n_partitions)]
-
-        # partition, bsz = partition_dataset(train_set, self.batch_size)
         
         return train_data_loaders, val_data_loaders
 
@@ -384,15 +378,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
         q.put(SimilarityMetricTrainerBase.SENTINEL)
 
     def __move_batch_to_device(self, graphs_batch):
-        new_graphs_batch = [PairSampleInfo_with_S2VGraphs(
-            pair.pair_sample_info,
-            (
-                pair.s2v_graphs[0].to(device=self.device, non_blocking=True),
-                pair.s2v_graphs[1].to(device=self.device, non_blocking=True)
-            )
-        )
-            for pair in graphs_batch]
-        return new_graphs_batch
+        for pair in graphs_batch:
+            for graph in pair.s2v_graphs:
+                graph.to(device=self.device, non_blocking=True)
 
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
@@ -429,8 +417,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 #print('Rank ', rank, f", Batch #{batch_index}", flush=True)
                 batch_index += 1
 
-                train_batch = self.__move_batch_to_device(train_batch)
-
                 # train loss
                 train_loss = self.calculate_loss_for_batch(train_batch, is_train=True)
                 epoch_train_loss += train_loss.item()
@@ -446,7 +432,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 epoch_val_loss = epoch_train_loss
             else:
                 for val_batch in val_loader:
-                    val_batch = self.__move_batch_to_device(val_batch)
                     # validation loss
                     val_loss = self.calculate_loss_for_batch(val_batch,
                                                              is_train=False)
