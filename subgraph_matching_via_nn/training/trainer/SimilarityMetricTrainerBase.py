@@ -51,9 +51,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
                                                device=device_id)
 
         gnn_model = self.graph_similarity_module.embedding_networks[0].gnn_model
-        gnn_model.load_state_dict(torch.load(
-            self.original_model_path,
-            map_location=torch.device(device_id)))
         self.graph_similarity_module.to(device_id).requires_grad_(True)
         gnn_model.move_buffers_to_device()
 
@@ -126,16 +123,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
         if not os.path.exists(dump_base_path):
             os.makedirs(dump_base_path)
         os.mkdir(dump_path)
-        original_model_file_name = "original_model.pt"
-
-        model = GraphCNN(num_layers=5, num_mlp_layers=2, input_dim=1, hidden_dim=64, output_dim=2,
-                         final_dropout=0.5, learn_eps=False, graph_pooling_type="sum", neighbor_pooling_type="sum",
-                         device='cpu')
-
-        self._save_model(model, dump_path, original_model_file_name)
-
-        self.original_model_path = os.path.join(dump_path, original_model_file_name)
-
 
     def _save_model(self, model, dump_path, file_name='best_model_state_dict.pt'):
         model_state_dict = copy.deepcopy(model.state_dict())
