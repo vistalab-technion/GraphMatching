@@ -161,7 +161,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.get_params_list(), self.max_grad_norm)
-        average_gradients(model)
+        if dist.is_initialized():
+            average_gradients(model)
 
         self.opt.step()
         self.lrs.step()
@@ -268,17 +269,26 @@ class SimilarityMetricTrainerBase(abc.ABC):
         else:
             print("Using existing data loaders")
 
-        for rank, device_id in enumerate(processes_device_ids):
+        if processes_device_ids == ['cpu']:
+            rank = 0
+            device_id = processes_device_ids[rank]
             train_loader_path = self.previous_train_loader_paths[rank]
             val_loader_path = self.previous_val_loader_paths[rank]
             q = mp.Queue()
-            p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
-                           args=(rank, size, self._training_worker_run_func, q, device_id,
-                                 train_loader_path, val_loader_path))
-            p.start()
-
             queues.append(q)
-            processes.append(p)
+            self._training_worker_run_func(device_id, q, train_loader_path, val_loader_path)
+        else:
+            for rank, device_id in enumerate(processes_device_ids):
+                train_loader_path = self.previous_train_loader_paths[rank]
+                val_loader_path = self.previous_val_loader_paths[rank]
+                q = mp.Queue()
+                p = mp.Process(target=SimilarityMetricTrainerBase.init_process,
+                               args=(rank, size, self._training_worker_run_func, q, device_id,
+                                     train_loader_path, val_loader_path))
+                p.start()
+
+                queues.append(q)
+                processes.append(p)
 
         dump_base_path = self.dump_base_path
         dump_path = os.path.join(dump_base_path, f"{str(time.time())}")
@@ -372,7 +382,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
         return all_train_losses, all_val_losses
 
     def __terminate_worker_process(self, q):
-        rank = dist.get_rank()
+        if dist.is_initialized():
+            rank = dist.get_rank()
+        else:
+            rank = 0
         print(f"worker process {rank} is terminating at {time.strftime('%H:%M:%S', time.localtime())}")
         sys.stdout.flush()
         q.put(SimilarityMetricTrainerBase.SENTINEL)
@@ -386,7 +399,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
     def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, q):
-        rank = dist.get_rank()
+        if dist.is_initialized():
+            rank = dist.get_rank()
+        else:
+            rank = 0
         print(f"worker process #{rank} is starting at {time.strftime('%H:%M:%S', time.localtime())}", flush=True)
 
         monitoring_update_epochs_pace = self.solver_params['train_monitoring_epochs_pace']
