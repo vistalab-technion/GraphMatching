@@ -302,8 +302,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         n_queues = len(queues)
 
         while True:
-            epoch_train_loss = 0
-            epoch_val_loss = 0
+
+
             last_monitoring_update_list = None
             monitoring_update_lists = []
 
@@ -320,51 +320,53 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
             update_list_size = len(monitoring_update_lists[0])
             for update_list_index in range(update_list_size):
-                for q_index in range(n_queues):
+                epoch_ctr += 1
+                epoch_train_loss = 0
+                epoch_val_loss = 0
 
+                for q_index in range(n_queues):
                     worker_train_loss, worker_val_loss = monitoring_update_lists[q_index][update_list_index]
                     epoch_train_loss += worker_train_loss
                     epoch_val_loss += worker_val_loss
 
-                    epoch_ctr += 1
-                    all_train_losses += [epoch_train_loss]
-                    all_val_losses += [epoch_val_loss]
+                all_train_losses += [epoch_train_loss]
+                all_val_losses += [epoch_val_loss]
 
-                    if epoch_val_loss < best_val_loss:
-                        best_val_loss = epoch_val_loss
+                if epoch_val_loss < best_val_loss:
+                    best_val_loss = epoch_val_loss
 
-                    if epoch_ctr % self.solver_params['k_update_plot'] == 0:
-                        # self.plot_current_loss_history(all_train_losses, all_val_losses, start_time, epoch_ctr,
-                        #                           best_val_loss, dump_path)
+                if epoch_ctr % self.solver_params['k_update_plot'] == 0:
+                    # self.plot_current_loss_history(all_train_losses, all_val_losses, start_time, epoch_ctr,
+                    #                           best_val_loss, dump_path)
 
-                        print(f"finished epoch {epoch_ctr} best_val_loss = {best_val_loss}")
-                        liveloss.update({'epoch train loss': epoch_train_loss})
-                        liveloss.send()
+                    print(f"finished epoch {epoch_ctr} best_val_loss = {best_val_loss}")
+                    liveloss.update({'epoch train loss': epoch_train_loss})
+                    liveloss.send()
 
-                        # save updated best model (with stats) post epoch
-                        # self._save_model_stats(model, dump_path, all_train_losses, all_val_losses)
+                    # save updated best model (with stats) post epoch
+                    # self._save_model_stats(model, dump_path, all_train_losses, all_val_losses)
 
-                    if self.train_loss_convergence_threshold is None:
-                        # check convergence in case relying on validation loss
-                        if epoch_val_loss >= best_val_loss:
-                            successive_convergence_epoch_ctr += 1
-                            if successive_convergence_epoch_ctr > self.cycle_patience * (
-                                    self.step_size_up + self.step_size_down):
-                                # model.load_state_dict(best_model_state_dict) #TODO
-                                return all_train_losses, all_val_losses
-                        else:
-                            # found better val loss
-                            successive_convergence_epoch_ctr = 0
-                            # best_model_state_dict = self._save_model(model, dump_path) #TODO
+                if self.train_loss_convergence_threshold is None:
+                    # check convergence in case relying on validation loss
+                    if epoch_val_loss >= best_val_loss:
+                        successive_convergence_epoch_ctr += 1
+                        if successive_convergence_epoch_ctr > self.cycle_patience * (
+                                self.step_size_up + self.step_size_down):
+                            # model.load_state_dict(best_model_state_dict) #TODO
+                            return all_train_losses, all_val_losses
                     else:
-                        # check convergence in case relying on train loss
-                        if epoch_train_loss <= self.train_loss_convergence_threshold:
-                            train_loss_successive_convergence_counter += 1
-                            if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                                # _ = self._save_model(model, dump_path) #TODO - model should be tracked, but avoid sending it between process (too heavy)
-                                return all_train_losses, all_val_losses
-                        else:
-                            train_loss_successive_convergence_counter = 0
+                        # found better val loss
+                        successive_convergence_epoch_ctr = 0
+                        # best_model_state_dict = self._save_model(model, dump_path) #TODO
+                else:
+                    # check convergence in case relying on train loss
+                    if epoch_train_loss <= self.train_loss_convergence_threshold:
+                        train_loss_successive_convergence_counter += 1
+                        if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
+                            # _ = self._save_model(model, dump_path) #TODO - model should be tracked, but avoid sending it between process (too heavy)
+                            return all_train_losses, all_val_losses
+                    else:
+                        train_loss_successive_convergence_counter = 0
 
         return all_train_losses, all_val_losses
 
