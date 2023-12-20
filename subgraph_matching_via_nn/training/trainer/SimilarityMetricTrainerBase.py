@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import copy
 import math
 import os
@@ -118,17 +119,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.previous_train_loader_paths = None
         self.previous_val_loader_paths = None
 
-        dump_base_path = f".{os.sep}mp"
-        dump_path = os.path.join(dump_base_path, str(time.time()))
-        if not os.path.exists(dump_base_path):
-            os.makedirs(dump_base_path)
-        os.mkdir(dump_path)
+    async def __async_model_dump(self, model_state_dict, path):
+        torch.save(model_state_dict, path)
+        print(f"model saved at {path}")
 
     def _save_model(self, model, dump_path, file_name='best_model_state_dict.pt'):
         model_state_dict = copy.deepcopy(model.state_dict())
         if dump_path is not None:
-            torch.save(model_state_dict,
-                       os.path.join(dump_path, file_name))
+            asyncio.run(self.__async_model_dump(model_state_dict, os.path.join(dump_path, file_name)))
         return model_state_dict
 
     def _save_model_stats(self, model, dump_path, all_train_losses, all_val_losses):
@@ -223,6 +221,13 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.previous_train_loader_paths = train_dataloader_paths
         self.previous_val_loader_paths = val_dataloader_paths
 
+    def __create_dump_dir(self, dump_base_path):
+        dump_path = os.path.join(dump_base_path, f"{str(time.time())}")
+        if not os.path.exists(dump_base_path):
+            os.makedirs(dump_base_path)
+        os.mkdir(dump_path)
+        return dump_path
+
     def train(self, processes_device_ids, use_existing_data_loaders=False, train_samples_list=[], val_samples_list=[], new_samples_amount=0):
         """
         Train graph descriptor (model)
@@ -277,11 +282,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 queues.append(q)
                 processes.append(p)
 
-        dump_base_path = self.dump_base_path
-        dump_path = os.path.join(dump_base_path, f"{str(time.time())}")
-        if not os.path.exists(dump_base_path):
-            os.makedirs(dump_base_path)
-        os.mkdir(dump_path)
+        dump_path = self.__create_dump_dir(self.dump_base_path)
 
         self.monitoring_training(queues, dump_path)
 
@@ -352,18 +353,15 @@ class SimilarityMetricTrainerBase(abc.ABC):
                         successive_convergence_epoch_ctr += 1
                         if successive_convergence_epoch_ctr > self.cycle_patience * (
                                 self.step_size_up + self.step_size_down):
-                            # model.load_state_dict(best_model_state_dict) #TODO
                             return all_train_losses, all_val_losses
                     else:
                         # found better val loss
                         successive_convergence_epoch_ctr = 0
-                        # best_model_state_dict = self._save_model(model, dump_path) #TODO
                 else:
                     # check convergence in case relying on train loss
                     if epoch_train_loss <= self.train_loss_convergence_threshold:
                         train_loss_successive_convergence_counter += 1
                         if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                            # _ = self._save_model(model, dump_path) #TODO - model should be tracked, but avoid sending it between process (too heavy)
                             return all_train_losses, all_val_losses
                     else:
                         train_loss_successive_convergence_counter = 0
@@ -383,6 +381,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
         for pair in graphs_batch:
             for graph in pair.s2v_graphs:
                 graph.to(device=self.device, non_blocking=True)
+
+    def __model_save_while_training(self, model, rank, epoch_ctr=None):
+        model_checkpoint_epochs_pace = self.solver_params['model_checkpoint_epochs_pace']
+        if rank == 0:
+            if (epoch_ctr is None) or (epoch_ctr % model_checkpoint_epochs_pace == 0):
+                dump_path = self.__create_dump_dir(f".{os.sep}mp")
+
+                _ = self._save_model(model, dump_path)
 
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
@@ -448,10 +454,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 q.put(monitoring_update_list)
                 monitoring_update_list = []
 
+            self.__model_save_while_training(model, rank, epoch_ctr)
+
         if len(monitoring_update_list) != 0:
             q.put(monitoring_update_list)
 
         print("rank", rank, ", epochs trained: ", epoch_ctr)
+
+        self.__model_save_while_training(model, rank)
         self.__terminate_worker_process(q)
 
     def create_data_sampler(self, train_set, new_examples_set_size):
