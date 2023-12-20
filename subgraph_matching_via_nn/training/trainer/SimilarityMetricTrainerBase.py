@@ -6,6 +6,7 @@ import os
 import pickle
 import sys
 import time
+from threading import Thread
 from typing import Dict, Tuple, List, TypeVar
 import torch_geometric as tg
 import numpy as np
@@ -119,14 +120,19 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.previous_train_loader_paths = None
         self.previous_val_loader_paths = None
 
-    async def __async_model_dump(self, model_state_dict, path):
+        self.threads = []
+
+    def __model_dump(self, model_state_dict, path):
         torch.save(model_state_dict, path)
         print(f"model saved at {path}")
 
     def _save_model(self, model, dump_path, file_name='best_model_state_dict.pt'):
         model_state_dict = copy.deepcopy(model.state_dict())
         if dump_path is not None:
-            asyncio.run(self.__async_model_dump(model_state_dict, os.path.join(dump_path, file_name)))
+            thread = Thread(target=self.__model_dump, args=(model_state_dict, os.path.join(dump_path, file_name)))
+            self.threads.append(thread)
+            thread.start()
+
         return model_state_dict
 
     def _save_model_stats(self, model, dump_path, all_train_losses, all_val_losses):
@@ -376,6 +382,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
         print(f"worker process {rank} is terminating at {time.strftime('%H:%M:%S', time.localtime())}")
         sys.stdout.flush()
         q.put(SimilarityMetricTrainerBase.SENTINEL)
+
+        for thread in self.threads:
+            thread.join()
 
     def __move_batch_to_device(self, graphs_batch):
         for pair in graphs_batch:
