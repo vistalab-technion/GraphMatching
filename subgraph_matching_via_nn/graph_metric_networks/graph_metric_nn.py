@@ -19,13 +19,8 @@ class BaseGraphMetricNetwork(nn.Module, abc.ABC):
                  embedding_networks: List[BaseGraphEmbeddingNetwork],
                  embdding_metric_network: BaseEmbeddingMetricNetwork):
         super().__init__()
-        self.embedding_networks = embedding_networks
+        self.embedding_networks = nn.ModuleList(embedding_networks)
         self.embdding_metric_network = embdding_metric_network
-
-        self.params = []
-        for network in self.embedding_networks:
-            self.params += list(network.parameters())
-        self.params = nn.ParameterList(self.params)
 
     def get_params_list(self) -> List[Tensor]:
         return list(self.parameters())
