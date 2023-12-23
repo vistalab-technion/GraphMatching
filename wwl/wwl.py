@@ -108,7 +108,7 @@ def range_manhattan_distances(X, Y, range_X, range_Y):
 
     dist = manhattan_distances(ranged_X, ranged_Y)
 
-    print(f"finished distance calculation for range X {range_X} and range Y {range_Y}", flush=True)
+    #print(f"finished distance calculation for range X {range_X} and range Y {range_Y}", flush=True)
 
     return range_X, range_Y, dist
 
