@@ -3,10 +3,18 @@
 #
 # December 2019, M. Togninalli
 # -----------------------------------------------------------------------------
+import contextlib
+from os import cpu_count
+
+from joblib import delayed, Parallel
+from sklearn.metrics.pairwise import check_pairwise_arrays, manhattan_distances
+from tqdm import tqdm
+
+from common.parallel_computation import tqdm_joblib
 from .propagation_scheme import WeisfeilerLehman, ContinuousWeisfeilerLehman
-from sklearn.metrics.pairwise import laplacian_kernel
 import ot
 import numpy as np
+import itertools as it
 
 
 def _compute_wasserstein_distance(label_sequences, label_index_to_sequence_for_comparison_map, sinkhorn=False,
@@ -93,6 +101,68 @@ def pairwise_wasserstein_distance(X, x_indices_for_comparison, node_features = N
     pairwise_distances = _compute_wasserstein_distance(node_representations, node_for_comparison_representations, sinkhorn=sinkhorn,
                                     categorical=categorical, sinkhorn_lambda=1e-2)
     return pairwise_distances
+
+def range_manhattan_distances(X, Y, range_X, range_Y):
+    ranged_X = X[range_X[0]: range_X[1] + 1]
+    ranged_Y = Y[range_Y[0]: range_Y[1] + 1]
+
+    dist = manhattan_distances(ranged_X, ranged_Y)
+
+    print(f"finished distance calculation for range X {range_X} and range Y {range_Y}", flush=True)
+
+    return range_X, range_Y, dist
+
+def laplacian_kernel(X, Y=None, gamma=None):
+    """Compute the laplacian kernel between X and Y.
+
+    The laplacian kernel is defined as::
+
+        K(x, y) = exp(-gamma ||x-y||_1)
+
+    for each pair of rows x in X and y in Y.
+    Read more in the :ref:`User Guide <laplacian_kernel>`.
+
+    .. versionadded:: 0.17
+
+    Parameters
+    ----------
+    X : ndarray of shape (n_samples_X, n_features)
+
+    Y : ndarray of shape (n_samples_Y, n_features), default=None
+
+    gamma : float, default=None
+        If None, defaults to 1.0 / n_features.
+
+    Returns
+    -------
+    kernel_matrix : ndarray of shape (n_samples_X, n_samples_Y)
+    """
+    X, Y = check_pairwise_arrays(X, Y)
+    if gamma is None:
+        gamma = 1.0 / X.shape[1]
+
+    range_chunk_size = 1000
+    pairs_indices_x_ranges = np.array_split(range(len(X)), len(X) // range_chunk_size)
+    pairs_indices_x_ranges = np.array([np.array(
+        [pairs_indices_x_range[0], pairs_indices_x_range[-1]]) for pairs_indices_x_range in pairs_indices_x_ranges])
+    pairs_indices_y_ranges = np.array_split(range(len(Y)), len(Y) // range_chunk_size)
+    pairs_indices_y_ranges = np.array([np.array([pairs_indices_y_range[0], pairs_indices_y_range[-1]]) for pairs_indices_y_range in pairs_indices_y_ranges])
+
+    pairs_indices_ranges = np.array(list(it.product(pairs_indices_x_ranges, pairs_indices_y_ranges)))
+
+    with tqdm_joblib(tqdm(desc="My calculation", total=len(pairs_indices_ranges))) as progress_bar:
+        ranged_distances = Parallel(n_jobs=int(cpu_count()), prefer='processes')(
+            delayed(range_manhattan_distances)(X=X, Y=Y, range_X=pairs_indices_range[0], range_Y=pairs_indices_range[1])
+            for pairs_indices_range in pairs_indices_ranges
+        )
+
+    distances = np.empty(shape=(len(X), len(Y)))
+    for range_X, range_Y, dist in ranged_distances:
+        distances[range_X[0]: range_X[1] + 1, range_Y[0]: range_Y[1] + 1] = dist
+
+    K = -gamma * distances
+    np.exp(K, K)  # exponentiate K in-place
+    return K
 
 def wwl(X, node_features=None, num_iterations=3, sinkhorn=False, gamma=None):
     """
