@@ -290,12 +290,13 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         dump_path = self.__create_dump_dir(self.dump_base_path)
 
-        self.monitoring_training(queues, dump_path)
+        best_val_loss = self.monitoring_training(queues, dump_path)
 
         for i, p in enumerate(processes):
             p.join()
             print(f"training worker process #{i} finished")
         print("finished monitoring training")
+        return best_val_loss
 
     def monitoring_training(self, queues, dump_path=None):
         all_train_losses = []
@@ -359,7 +360,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                         successive_convergence_epoch_ctr += 1
                         if successive_convergence_epoch_ctr > self.cycle_patience * (
                                 self.step_size_up + self.step_size_down):
-                            return all_train_losses, all_val_losses
+                            return best_val_loss
                     else:
                         # found better val loss
                         successive_convergence_epoch_ctr = 0
@@ -368,11 +369,11 @@ class SimilarityMetricTrainerBase(abc.ABC):
                     if epoch_train_loss <= self.train_loss_convergence_threshold:
                         train_loss_successive_convergence_counter += 1
                         if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                            return all_train_losses, all_val_losses
+                            return best_val_loss
                     else:
                         train_loss_successive_convergence_counter = 0
 
-        return all_train_losses, all_val_losses
+        return best_val_loss
 
     def __terminate_worker_process(self, q):
         if dist.is_initialized():
