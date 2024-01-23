@@ -44,6 +44,6 @@ def calculate_energy_based_hidden_rep(hidden_rep, threshold=0.5):
 def show_distance_matrix(distances, title="GraphEmbeddingsDistancesMatrix"):
     # plot_heatmap_basic(distances.detach().cpu().numpy(), title)
 
-    sns.heatmap(distances.detach().cpu().numpy())
+    sns.heatmap(distances.detach().cpu().numpy(), cmap="PiYG")
     plt.title(title)
     plt.show()
