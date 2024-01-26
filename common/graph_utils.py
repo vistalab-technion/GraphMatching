@@ -37,20 +37,39 @@ class GED_graph_generator:
                     ged_1_add_operations_list.append(("add", edge))
 
         # generate homogenic operation ged_dist operations lists
-        ged_dist_add_operations_list_list = list(itertools.combinations(ged_1_add_operations_list, self.ged_dist))
-        ged_dist_remove_operations_list_list = list(itertools.combinations(ged_1_remove_operations_list, self.ged_dist))
-        ged_dist_operations_list_list = ged_dist_add_operations_list_list + ged_dist_remove_operations_list_list
+        ged_dist_add_operations_list = itertools.combinations(ged_1_add_operations_list, self.ged_dist)
+        ged_dist_remove_operations_list = itertools.combinations(ged_1_remove_operations_list, self.ged_dist)
 
-        # yield copied graph with applied GEd operations, in random
-
-        random.shuffle(ged_dist_operations_list_list)
-        for ged_dist_operations_list in ged_dist_operations_list_list:
-            copy_graph = self.reference_graph.copy()
+        def generate_operations_series_list(reference_graph, ged_dist_operations_list):
+            copy_graph = reference_graph.copy()
 
             for ged_operation, edge in ged_dist_operations_list:
                 if ged_operation == "remove":
                     copy_graph.remove_edge(*edge)
                 else:
                     copy_graph.add_edge(*edge)
+            return copy_graph
+
+        is_choosing_next_list_randomly = True
+        while True:
+            if is_choosing_next_list_randomly:
+                next_list_choise = random.randint(0, 1)
+
+            try:
+                if next_list_choise == 0:
+                    ged_dist_operations_list = next(ged_dist_add_operations_list)
+                else:
+                    ged_dist_operations_list = next(ged_dist_remove_operations_list)
+            except StopIteration:
+                ged_dist_operations_list = None
+
+            if ged_dist_operations_list is None:
+                if not is_choosing_next_list_randomly:
+                    break
+                next_list_choise = 1 - next_list_choise
+                is_choosing_next_list_randomly = False
+                continue
+
+            copy_graph = generate_operations_series_list(self.reference_graph, ged_dist_operations_list)
             yield copy_graph
         print("finished generation")
