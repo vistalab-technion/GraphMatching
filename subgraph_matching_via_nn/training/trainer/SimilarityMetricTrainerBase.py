@@ -113,7 +113,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_loss_function = MarginLoss(
             solver_params['margin_loss_margin_value'])
 
-        self.stub_grad_distance = None
+        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False, device=self.device)
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
