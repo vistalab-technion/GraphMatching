@@ -1,5 +1,7 @@
 import itertools
+import math
 import random
+from multiprocessing import Pool
 from os import cpu_count
 import networkx as nx
 from joblib import Parallel, delayed
@@ -88,18 +90,16 @@ class SubGraphGenerator:
 
     @staticmethod
     def generate_subgraph(graph, connected_subgraphs_nodes_list):
-        subgraph = graph.copy()
-
-        removed_nodes = [node for node in graph.nodes if node not in connected_subgraphs_nodes_list]
-        subgraph.remove_nodes_from(removed_nodes)
+        subgraph = graph.subgraph(connected_subgraphs_nodes_list).copy()
         fill_subgraph_missing_nodes(subgraph, graph)
 
         return subgraph
 
     @staticmethod
     def generate_subgraph_for_sublists_of_nodes(graph, connected_subgraphs_nodes_lists):
-        return [SubGraphGenerator.generate_subgraph(graph, connected_subgraphs_nodes_list)
+        res = [SubGraphGenerator.generate_subgraph(graph, connected_subgraphs_nodes_list)
                 for connected_subgraphs_nodes_list in connected_subgraphs_nodes_lists]
+        return res
 
     # https://stackoverflow.com/questions/75727217/fast-way-to-find-all-connected-subgraphs-of-given-size-in-python
     @staticmethod
@@ -131,24 +131,41 @@ class SubGraphGenerator:
         return found_subgraphs
 
     @staticmethod
-    def generate_k_subgraphs(graph, k, chunk_size = 8_000):
-        curr_time = TimeLogging.log_time(None, "enter generate_k_subgraphs")
-
+    def generate_k_subgraphs_for_chunk(graph, k, chunk_index, chunks_amount):
+        curr_time = TimeLogging.log_time(None, "enter generate_k_subgraphs_for_chunk")
         all_connected_subgraphs_nodes_lists = SubGraphGenerator.all_connected_subgraphs(graph, k)
         n = len(all_connected_subgraphs_nodes_lists)
-
+        chunk_size = int(math.ceil(n / chunks_amount))
         curr_time = TimeLogging.log_time(curr_time, f"finished all_connected_subgraphs (total of {n} graphs)")
 
-        chunks = [all_connected_subgraphs_nodes_lists[x:min(x + chunk_size, n)] for x in
-                  range(0, len(all_connected_subgraphs_nodes_lists), chunk_size)]
-        _ = TimeLogging.log_time(curr_time, f"finished splitting graphs list into {len(chunks)} chunks")
+        chunk_offset = chunk_index * chunk_size
+        chunk = all_connected_subgraphs_nodes_lists[chunk_offset: min(chunk_offset + chunk_size, n)]
 
-        with tqdm_joblib(tqdm(desc="Graphs construction", total=len(chunks))) as progress_bar:
-            subgraph_lists_list = Parallel(n_jobs=int(cpu_count()), prefer='processes')(
-                delayed(SubGraphGenerator.generate_subgraph_for_sublists_of_nodes)
-                (graph=graph, connected_subgraphs_nodes_lists=connected_subgraphs_nodes_lists)
-                for connected_subgraphs_nodes_lists in chunks
-            )
+        SubGraphGenerator.generate_subgraph_for_sublists_of_nodes(graph, chunk)
+
+        curr_time = TimeLogging.log_time(curr_time, f"Chunk #{chunk_index} finished, chunk size={len(chunk)}")
+
+    @staticmethod
+    def generate_k_subgraphs(graph, k, chunk_size=8_000):
+        curr_time = TimeLogging.log_time(None, "enter generate_k_subgraphs")
+        cpu_num = int(cpu_count())
+
+        # create and configure the process pool
+        with Pool(processes=cpu_num) as pool:
+            # execute tasks in order
+            subgraph_lists_list = pool.starmap(SubGraphGenerator.generate_k_subgraphs_for_chunk,
+                                               zip(itertools.repeat(graph), itertools.repeat(k), range(cpu_num), itertools.repeat(cpu_num)))
+
+        curr_time = TimeLogging.log_time(curr_time, "finished generating subgraphs")
+
+        # subgraph_lists_list = [] #TODO
+        print(len(subgraph_lists_list))
+        # # with tqdm_joblib(tqdm(desc="Graphs construction", total=len(chunks))) as progress_bar:
+        # subgraph_lists_list = Parallel(n_jobs=cpu_num, backend='multiprocessing', batch_size=1)(
+        #         delayed(SubGraphGenerator.generate_subgraph_for_sublists_of_nodes)
+        #         (graph=graph, connected_subgraphs_nodes_lists=connected_subgraphs_nodes_lists)
+        #         for connected_subgraphs_nodes_lists in chunks
+        #     )
 
         subgraphs_list = [e for lst in subgraph_lists_list for e in lst]
 
