@@ -157,9 +157,6 @@ class SubGraphGenerator:
                                                zip(itertools.repeat(graph), itertools.repeat(k), range(cpu_num), itertools.repeat(cpu_num)))
 
         curr_time = TimeLogging.log_time(curr_time, "finished generating subgraphs")
-
-        # subgraph_lists_list = [] #TODO
-        print(len(subgraph_lists_list))
         # # with tqdm_joblib(tqdm(desc="Graphs construction", total=len(chunks))) as progress_bar:
         # subgraph_lists_list = Parallel(n_jobs=cpu_num, backend='multiprocessing', batch_size=1)(
         #         delayed(SubGraphGenerator.generate_subgraph_for_sublists_of_nodes)
