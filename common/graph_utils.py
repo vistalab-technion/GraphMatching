@@ -3,6 +3,7 @@ import math
 import random
 from multiprocessing import Pool
 from os import cpu_count
+import sys
 import networkx as nx
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -131,39 +132,42 @@ class SubGraphGenerator:
         return found_subgraphs
 
     @staticmethod
-    def generate_k_subgraphs_for_chunk(graph, k, chunk_index, chunks_amount):
+    def generate_k_subgraphs_for_chunk(graph, chunk_index, chunk):
         curr_time = TimeLogging.log_time(None, "enter generate_k_subgraphs_for_chunk")
-        all_connected_subgraphs_nodes_lists = SubGraphGenerator.all_connected_subgraphs(graph, k)
-        n = len(all_connected_subgraphs_nodes_lists)
-        chunk_size = int(math.ceil(n / chunks_amount))
-        curr_time = TimeLogging.log_time(curr_time, f"finished all_connected_subgraphs (total of {n} graphs)")
 
-        chunk_offset = chunk_index * chunk_size
-        chunk = all_connected_subgraphs_nodes_lists[chunk_offset: min(chunk_offset + chunk_size, n)]
-
-        SubGraphGenerator.generate_subgraph_for_sublists_of_nodes(graph, chunk)
+        res = SubGraphGenerator.generate_subgraph_for_sublists_of_nodes(graph, chunk)
 
         curr_time = TimeLogging.log_time(curr_time, f"Chunk #{chunk_index} finished, chunk size={len(chunk)}")
+        sys.stdout.flush()
+        return res
 
     @staticmethod
-    def generate_k_subgraphs(graph, k, chunk_size=8_000):
+    def generate_k_subgraphs(graph, k, is_parallel=True):
         curr_time = TimeLogging.log_time(None, "enter generate_k_subgraphs")
         cpu_num = int(cpu_count())
+        all_connected_subgraphs_nodes_lists = SubGraphGenerator.all_connected_subgraphs(graph, k)
+        n = len(all_connected_subgraphs_nodes_lists)
 
-        # create and configure the process pool
-        with Pool(processes=cpu_num) as pool:
-            # execute tasks in order
-            subgraph_lists_list = pool.starmap(SubGraphGenerator.generate_k_subgraphs_for_chunk,
-                                               zip(itertools.repeat(graph), itertools.repeat(k), range(cpu_num), itertools.repeat(cpu_num)))
+        if is_parallel:
+            chunks_amount = cpu_num
+        else:
+            chunks_amount = 1
+
+        chunk_size = int(math.ceil(n / chunks_amount))
+        curr_time = TimeLogging.log_time(curr_time, f"finished all_connected_subgraphs (total of {n} graphs)")
+        
+        chunks = [all_connected_subgraphs_nodes_lists[i*chunk_size: min(i*chunk_size + chunk_size, n)] for i in range(chunks_amount)]
+
+        if is_parallel:
+            # create and configure the process pool
+            with Pool(processes=cpu_num) as pool:
+                # execute tasks in order
+                subgraph_lists_list = pool.starmap(SubGraphGenerator.generate_k_subgraphs_for_chunk,
+                                                   zip(itertools.repeat(graph), range(chunks_amount), chunks))
+            subgraphs_list = [e for lst in subgraph_lists_list for e in lst]
+        else:
+            subgraphs_list = SubGraphGenerator.generate_k_subgraphs_for_chunk(graph, 1, chunks[0])
 
         curr_time = TimeLogging.log_time(curr_time, "finished generating subgraphs")
-        # # with tqdm_joblib(tqdm(desc="Graphs construction", total=len(chunks))) as progress_bar:
-        # subgraph_lists_list = Parallel(n_jobs=cpu_num, backend='multiprocessing', batch_size=1)(
-        #         delayed(SubGraphGenerator.generate_subgraph_for_sublists_of_nodes)
-        #         (graph=graph, connected_subgraphs_nodes_lists=connected_subgraphs_nodes_lists)
-        #         for connected_subgraphs_nodes_lists in chunks
-        #     )
-
-        subgraphs_list = [e for lst in subgraph_lists_list for e in lst]
 
         return subgraphs_list
