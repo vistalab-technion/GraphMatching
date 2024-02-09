@@ -107,10 +107,10 @@ class SubGraphGenerator:
     def all_connected_subgraphs(g, m):
         found_subgraphs = []
         n = len(g.nodes)
-        adj_sets = [set() for i in range(n)]
+        adj_sets_map = {i:set() for i in g.nodes}
         for (i, j) in g.edges:
-            adj_sets[i].add(j)
-            adj_sets[j].add(i)
+            adj_sets_map[i].add(j)
+            adj_sets_map[j].add(i)
 
         def _recurse(t, possible, excluded, found_subgraphs=[]):
             if len(t) == m:
@@ -126,9 +126,9 @@ class SubGraphGenerator:
                         _recurse(new_t, new_possible, excluded, found_subgraphs)
 
         excluded = set()
-        for (i, possible) in enumerate(adj_sets):
-            excluded.add(i)
-            _recurse((i,), possible, excluded, found_subgraphs)
+        for node_i, possible in adj_sets_map.items():
+            excluded.add(node_i)
+            _recurse((node_i,), possible, excluded, found_subgraphs)
         return found_subgraphs
 
     @staticmethod
