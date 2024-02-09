@@ -7,15 +7,18 @@ from matplotlib import pyplot as plt
 
 os.environ['R_HOME'] = 'C:\\Program Files\\R\\R-4.3.2'
 # os.environ['R_HOME'] = 'C:\\Users\\kogan\\AppData\\Local\\R\\win-library\\4.3'
-import rpy2.robjects as robjects
-import rpy2.robjects as ro
-import rpy2.robjects.numpy2ri
-import rpy2.robjects.numpy2ri as rpyn
-r = robjects.r
-rpy2.robjects.numpy2ri.activate()
-
-from rpy2.robjects.packages import importr
-smacof = importr('smacof')
+try:
+    import rpy2.robjects as robjects
+    import rpy2.robjects as ro
+    import rpy2.robjects.numpy2ri
+    import rpy2.robjects.numpy2ri as rpyn
+    r = robjects.r
+    rpy2.robjects.numpy2ri.activate()
+    
+    from rpy2.robjects.packages import importr
+    smacof = importr('smacof')
+except ModuleNotFoundError:
+    print(f"!!! WARNING: COULD NOT IMPORT rpy2, check R_HOME path exists: {os.environ['R_HOME']} !!!")
 
 def load_r_source_code(directory):
     # iterate over files in
