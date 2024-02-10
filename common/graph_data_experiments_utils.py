@@ -425,32 +425,47 @@ def compare_graphs_and_generate_pair_example(G1_annotated, G2_annotated, isomorp
     #     # negative example
     #     return generate_pair_example(G1_annotated, G2_annotated, is_negative_example = True)
 
+def remove_isolated_nodes_from_graph(graph:nx.Graph):
+    isolated_nodes_indices = list(nx.isolates(graph))
+    graph.remove_nodes_from(isolated_nodes_indices)
+
 def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel):
-    file_rel_path = 'full_graph.p'
+    g_file_rel_path = 'full_graph.p'
+    g_sub_file_rel_path = 'subgraph0.p'
 
     circuit_dir = f"{circuit_base_dir}{circuit_file_name}{os.sep}"
     loader_params = {
      'data_path' : str(circuit_dir),
-     'g_full_path': file_rel_path,
-     'g_sub_path': file_rel_path}
+     'g_full_path': g_file_rel_path,
+     'g_sub_path': g_sub_file_rel_path}
     
     sub_graph = \
         load_graph(type='subcircuit',
                    loader_params=loader_params)
 
-    print(f"graph has {len(sub_graph.G)} nodes")
+    G_sub = sub_graph.G_sub
+    k = len(G_sub)
+    n = len(sub_graph.G)
+    candidate_nodes_to_remove_from_full_graph = list(set(sub_graph.G.nodes).difference(G_sub.nodes))
+    G_perturbed = sub_graph.G.copy()
+    n_nodes_to_remove_from_full_graph = len(candidate_nodes_to_remove_from_full_graph) // 2
+    G_perturbed.remove_nodes_from(candidate_nodes_to_remove_from_full_graph[:n_nodes_to_remove_from_full_graph])
 
-    source_graph = sub_graph.G
+    remove_isolated_nodes_from_graph(G_perturbed)
+    
+    print(f"full graph has {n} nodes, subgraph has {k} nodes, removing {n - len(G_perturbed)} non subgraph nodes from full graph")
+
+    source_graph = G_perturbed
     print("starting generating subgraphs")
     curr_time = TimeLogging.log_time(None, "start generate_k_subgraphs")
 
     
-    k_subgraphs = SubGraphGenerator.generate_k_subgraphs(source_graph, k=7, is_parallel=is_parallel)
+    k_subgraphs = SubGraphGenerator.generate_k_subgraphs(source_graph, k=k, is_parallel=is_parallel)
     k_subgraph_annotated_graphs = [AnnotatedGraph(g, label=i) for i, g in enumerate(k_subgraphs)]
     
     curr_time = TimeLogging.log_time(curr_time, "end generate_k_subgraphs")
 
-    return k_subgraph_annotated_graphs
+    return k_subgraph_annotated_graphs, G_perturbed, G_sub
 
 def compare_graphs_and_generate_pair_example_against_base_graph(k_subgraph_annotated_graphs_file_path, base_graph_indices, chunk_index, output_folder_base_path):
     curr_time = TimeLogging.log_time(None, "enter loading k-subgraphs file")
@@ -480,7 +495,7 @@ def generate_pairs_data_set(circuit_base_dir, circuit_file_name, output_folder_b
     curr_time = TimeLogging.log_time(None, "enter generate_pairs_data_set")
     cpu_num = int(cpu_count())
 
-    k_subgraph_annotated_graphs = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True)
+    k_subgraph_annotated_graphs, G_perturbed, G_sub = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True)
     k_subgraph_annotated_graphs_file_path = f"k_subgraph_annotated_graphs.p"
     with open(k_subgraph_annotated_graphs_file_path, 'wb') as f:
         pickle.dump(k_subgraph_annotated_graphs, f)
@@ -504,7 +519,7 @@ def generate_pairs_data_set(circuit_base_dir, circuit_file_name, output_folder_b
     curr_time = TimeLogging.log_time(curr_time, "finished generate_pairs_data_set")
     # train_samples_list = [elem for lst in train_samples_list for elem in lst]
     
-    return k_subgraph_annotated_graphs
+    return k_subgraph_annotated_graphs, G_perturbed, G_sub
 
 def generate_random_ged_paris(annotated_subgraph: AnnotatedGraph, ged_dist: int, pairs_n: int, is_negative_example: bool, force_exactly_pairs_n:bool=True):
     train_samples_list = []
