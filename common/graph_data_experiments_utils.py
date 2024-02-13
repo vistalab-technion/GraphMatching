@@ -465,7 +465,18 @@ def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_paral
     
     curr_time = TimeLogging.log_time(curr_time, "end generate_k_subgraphs")
 
-    return k_subgraph_annotated_graphs, G_perturbed, G_sub
+    return k_subgraph_annotated_graphs, k_subgraphs, G_perturbed, G_sub
+
+
+def get_pairs_distances_for_target_graph(trainer, graph_metric_nn, all_graphs, all_pairs, target_k_subgraph_label):
+    target_annotated_graph = all_graphs[target_k_subgraph_label]
+
+    self_pair = generate_pair_example(target_annotated_graph, target_annotated_graph, is_negative_example = False)
+    target_graph_pairs = [pair for pair in all_pairs if target_k_subgraph_label in [pair.masked_graph.label, pair.subgraph.label]]
+
+    train_positive_distances, train_negative_distances = get_examples_distances(trainer, graph_metric_nn, [self_pair] + target_graph_pairs)
+
+    return train_positive_distances, train_negative_distances, self_pair
 
 def compare_graphs_and_generate_pair_example_against_base_graph(k_subgraph_annotated_graphs_file_path, base_graph_indices, chunk_index, output_folder_base_path):
     curr_time = TimeLogging.log_time(None, "enter loading k-subgraphs file")
@@ -489,37 +500,47 @@ def compare_graphs_and_generate_pair_example_against_base_graph(k_subgraph_annot
     
     # return train_samples_list
 
-def generate_pairs_data_set(circuit_base_dir, circuit_file_name, output_folder_base_path = "brute_force_pairs"):
-    train_samples_list = []
-    
-    curr_time = TimeLogging.log_time(None, "enter generate_pairs_data_set")
-    cpu_num = int(cpu_count())
+def generate_pairs_data_set_based_on_graphs(k_subgraph_annotated_graphs, output_folder_base_path):
+    curr_time = TimeLogging.log_time(None, "enter generate_pairs_data_set_based_on_graphs")
 
-    k_subgraph_annotated_graphs, G_perturbed, G_sub = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True)
     k_subgraph_annotated_graphs_file_path = f"k_subgraph_annotated_graphs.p"
     with open(k_subgraph_annotated_graphs_file_path, 'wb') as f:
         pickle.dump(k_subgraph_annotated_graphs, f)
-    
+
     if not os.path.exists(output_folder_base_path):
         os.makedirs(output_folder_base_path)
-    
+
+    cpu_num = int(cpu_count())
     n = len(k_subgraph_annotated_graphs)
     chunks_amount = cpu_num
     chunk_size = int(math.ceil(n / chunks_amount))
 
-    base_graph_chunks_indices = [(chunk_index * chunk_size, min(chunk_index * chunk_size + chunk_size, n)) for chunk_index in range(0, chunks_amount)]
-    
+    base_graph_chunks_indices = [(chunk_index * chunk_size, min(chunk_index * chunk_size + chunk_size, n)) for
+                                 chunk_index in range(0, chunks_amount)]
+
     with tqdm_joblib(tqdm(desc="Pairs dataset construction", total=len(base_graph_chunks_indices))) as progress_bar:
         Parallel(n_jobs=cpu_num, backend='multiprocessing')(
-                delayed(compare_graphs_and_generate_pair_example_against_base_graph)
-                    (k_subgraph_annotated_graphs_file_path=k_subgraph_annotated_graphs_file_path, base_graph_indices=base_graph_chunk_indices, chunk_index=chunk_index, output_folder_base_path=output_folder_base_path)
-                    for chunk_index, base_graph_chunk_indices in enumerate(base_graph_chunks_indices)
-            )
+            delayed(compare_graphs_and_generate_pair_example_against_base_graph)
+            (k_subgraph_annotated_graphs_file_path=k_subgraph_annotated_graphs_file_path,
+             base_graph_indices=base_graph_chunk_indices, chunk_index=chunk_index,
+             output_folder_base_path=output_folder_base_path)
+            for chunk_index, base_graph_chunk_indices in enumerate(base_graph_chunks_indices)
+        )
 
-    curr_time = TimeLogging.log_time(curr_time, "finished generate_pairs_data_set")
-    # train_samples_list = [elem for lst in train_samples_list for elem in lst]
-    
-    return k_subgraph_annotated_graphs, G_perturbed, G_sub
+    _ = TimeLogging.log_time(curr_time, "finished generate_pairs_data_set_based_on_graphs")
+
+
+def generate_pairs_data_set(circuit_base_dir, circuit_file_name, output_folder_base_path = "brute_force_pairs"):
+
+    curr_time = TimeLogging.log_time(None, "enter generate_pairs_data_set")
+
+    k_subgraph_annotated_graphs, k_subgraphs, G_perturbed, G_sub = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True)
+
+    generate_pairs_data_set_based_on_graphs(k_subgraph_annotated_graphs, output_folder_base_path)
+
+    _ = TimeLogging.log_time(curr_time, "finished generate_pairs_data_set")
+
+    return k_subgraph_annotated_graphs, k_subgraphs, G_perturbed, G_sub
 
 def generate_random_ged_paris(annotated_subgraph: AnnotatedGraph, ged_dist: int, pairs_n: int, is_negative_example: bool, force_exactly_pairs_n:bool=True):
     train_samples_list = []
