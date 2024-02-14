@@ -62,7 +62,23 @@ def get_out_sources_max_distance(target_graph, full_graph_adj, source_graphs, gr
 
 if __name__ == "__main__":
     from torch import optim
+    from subgraph_matching_via_nn.data.data_loaders import load_graph
+    from subgraph_matching_via_nn.data.paths import DATA_PATH, COMP1_SUB0_path, COMP1_FULL_path
     device = 'cuda'
+
+    # Set the size of the graph and the subgraph
+    n = 10  # Number of nodes in the graph (for random graph)
+    m = 7  # Number of nodes in the subgraph (for random graph)
+    loader_params = {'graph_size': n,
+                     'subgraph_size': m,
+                     'data_path': DATA_PATH,
+                     'g_full_path': COMP1_FULL_path,
+                     'g_sub_path': COMP1_SUB0_path}
+
+    sub_graph = \
+        load_graph(type='random',
+                   loader_params=loader_params)  # type = 'random', 'example', 'subcircuit'
+
     parameter_graph, parameters = build_param_graph(sub_graph.A_sub
                                                     , device)
 
@@ -75,6 +91,8 @@ if __name__ == "__main__":
 
         print(loss)
         epoch_loss = loss.item()
+        if epoch_loss == 0:
+            break
 
         optimizer.zero_grad()
         loss.backward()
