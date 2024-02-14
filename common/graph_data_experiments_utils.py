@@ -8,8 +8,10 @@ import os
 import sys
 import numpy as np
 import torch
+from sklearn.model_selection import train_test_split
 from torch import optim
 from common.graph_utils import SubGraphGenerator
+from common.out_sources_distance import get_out_sources_max_distance
 from subgraph_matching_via_nn.data.data_loaders import load_graph
 from common.logger import TimeLogging
 from powerful_gnns.util import S2VGraph, load_data_given_graph_list_and_label_map
@@ -834,3 +836,95 @@ def calc_performance_metrics(graph_metric_nn, samples, positive_distances, negat
     print(f"FN={FN} out of {len(positive_distances)} positive examples")
 
     return single_pair_forward_positive_distances, single_pair_forward_negative_distances
+
+
+def analyze_model_distances(trainer, graph_metric_nn, pairs, solver_params, plot_range_max=20):
+    train_positive_distances, train_negative_distances = get_examples_distances(trainer, graph_metric_nn, pairs)
+    print(f"positive pairs distances= {len(train_positive_distances)}")
+    print(f"negative pairs distances= {len(train_negative_distances)}")
+    print(f"max positive pairs distance = {max(train_positive_distances)}")
+    print(f"min negative pairs distance = {min(train_negative_distances)}")
+    plot_histogram(train_positive_distances, "positive pair distances", min_range=0, max_range=plot_range_max)
+    plot_histogram(train_negative_distances, "negative pair distances", min_range=0, max_range=plot_range_max)
+
+    calc_margin_loss(torch.tensor(train_positive_distances+train_negative_distances), torch.cat((torch.ones(len(train_positive_distances)), torch.zeros(len(train_negative_distances)))), margin=solver_params['margin_loss_margin_value'])
+
+
+def get_isomorphic_graph_to_target_graph(graphs, pairs, target_graph_label):
+    chosen_graph_isomorphic_pairs = [pair for pair in pairs if
+                                     (pair.is_negative_sample == False) and (
+                                                 target_graph_label in [
+                                             pair.masked_graph.label, pair.subgraph.label])]
+
+    # each k subgraph should have its own original nodes
+    chosen_graph_isomorphic_graphs = [graphs[p.masked_graph.label].copy() for p in
+                                      chosen_graph_isomorphic_pairs]
+    for g in chosen_graph_isomorphic_graphs:
+        remove_isolated_nodes_from_graph(g)
+    return chosen_graph_isomorphic_graphs
+
+
+def analyze_pairs_distances(trainer, graph_metric_nn, pairs, annotated_graphs, original_nodes_graphs, target_label, G_perturbed, solver_params, device):
+    graph_metric_nn.eval()
+
+    train_positive_distances, train_negative_distances, self_pair = get_pairs_distances_for_target_graph(trainer, graph_metric_nn, target_k_subgraph_label = target_label, all_pairs=pairs, all_graphs=annotated_graphs)
+
+    print(f"positive pairs distances= {len(train_positive_distances)}")
+    print(f"negative pairs distances= {len(train_negative_distances)}")
+    print(f"max positive pairs distance = {max(train_positive_distances)}")
+    print(f"min negative pairs distance = {min(train_negative_distances)}")
+    calc_margin_loss(torch.tensor(train_positive_distances+train_negative_distances), torch.cat((torch.ones(len(train_positive_distances)), torch.zeros(len(train_negative_distances)))), margin=solver_params['margin_loss_margin_value'])
+
+    self_graph = original_nodes_graphs[target_label].copy()
+    remove_isolated_nodes_from_graph(self_graph)
+
+    #each k subgraph should have its own original nodes
+    chosen_graph_isomorphic_graphs = get_isomorphic_graph_to_target_graph(original_nodes_graphs,
+                                                                          pairs,
+                                                                          target_label)
+    source_graphs = [self_graph] + chosen_graph_isomorphic_graphs
+
+    full_graph_with_multiple_isomorphic_graphs_adj_mat, graph_node_to_adj_node_map = SubGraphGenerator.generate_adj_matrix_with_nodes_mapping(
+        G_perturbed)
+
+    out_source_distances = get_out_sources_max_distance(target_graph=self_graph, full_graph_adj=full_graph_with_multiple_isomorphic_graphs_adj_mat, source_graphs=source_graphs, graph_node_to_adj_node_map=graph_node_to_adj_node_map, device=device)
+    print(f"out_source_distances= {out_source_distances}")
+
+
+def load_dump_file_pairs_dataset(path, n_partitions=8): #88
+    samples_list = []
+    for chunk_index in range(0, n_partitions):
+        with open(f'{path}{os.sep}{chunk_index}.p', 'rb') as file:
+            tmp_samples_list = pickle.load(file)
+        print(len(tmp_samples_list))
+        samples_list += tmp_samples_list
+    return samples_list
+
+
+def get_map_keys_with_value_of(map, target_val):
+    matched = [key for key, val in map.items() if val == target_val]
+    return matched
+
+
+def generate_pairs_datasets_for_model_generalization(k_subgraph_label_to_isomorphic_pairs_labels_map, k_subgraph_annotated_graphs, train_size=0.7):
+    graph_isomorphic_group_labels_train, graph_isomorphic_group_labels_test = train_test_split(list(k_subgraph_label_to_isomorphic_pairs_labels_map.keys()), shuffle=True, train_size=train_size)
+
+    graph_isomorphic_group_labels_train_graphs = [[label] + k_subgraph_label_to_isomorphic_pairs_labels_map[label] for label in graph_isomorphic_group_labels_train]
+    graph_isomorphic_group_labels_test_graphs = [[label] + k_subgraph_label_to_isomorphic_pairs_labels_map[label] for label in graph_isomorphic_group_labels_test]
+
+    graph_isomorphic_group_labels_train_graphs = [elem for lst in graph_isomorphic_group_labels_train_graphs for elem in lst]
+    graph_isomorphic_group_labels_test_graphs = [elem for lst in graph_isomorphic_group_labels_test_graphs for elem in lst]
+
+    train_k_subgraph_annotated_graphs = [k_subgraph_annotated_graphs[label] for label in graph_isomorphic_group_labels_train_graphs]
+    test_k_subgraph_annotated_graphs = [k_subgraph_annotated_graphs[label] for label in graph_isomorphic_group_labels_test_graphs]
+
+    train_pairs_dump_folder_path = "generalization_train_pairs"
+    test_pairs_dump_folder_path = "generalization_test_pairs"
+
+    generate_pairs_data_set_based_on_graphs(train_k_subgraph_annotated_graphs, train_pairs_dump_folder_path)
+    generate_pairs_data_set_based_on_graphs(test_k_subgraph_annotated_graphs, test_pairs_dump_folder_path)
+
+    train_pairs = load_dump_file_pairs_dataset(train_pairs_dump_folder_path)
+    test_pairs = load_dump_file_pairs_dataset(test_pairs_dump_folder_path)
+
+    return train_pairs, test_pairs

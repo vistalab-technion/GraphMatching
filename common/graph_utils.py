@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from os import cpu_count
 import sys
 import networkx as nx
+import torch
 from joblib import Parallel, delayed
 from tqdm import tqdm
 from common.logger import TimeLogging
@@ -101,6 +102,14 @@ class SubGraphGenerator:
         res = [SubGraphGenerator.generate_subgraph(graph, connected_subgraphs_nodes_list)
                 for connected_subgraphs_nodes_list in connected_subgraphs_nodes_lists]
         return res
+
+    @staticmethod
+    def generate_adj_matrix_with_nodes_mapping(graph: nx.Graph):
+        nodelist = graph.nodes
+
+        graph_node_to_adj_node_map = {node: i for i, node in enumerate(nodelist)}
+
+        return torch.from_numpy((nx.adjacency_matrix(graph, nodelist=nodelist)).toarray()), graph_node_to_adj_node_map
 
     # https://stackoverflow.com/questions/75727217/fast-way-to-find-all-connected-subgraphs-of-given-size-in-python
     @staticmethod
