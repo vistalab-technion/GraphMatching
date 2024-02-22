@@ -7,7 +7,7 @@ from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import \
     EmbeddingMetricNetwork
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 import torch
-from subgraph_matching_via_nn.utils.utils import plot_indicator
+from subgraph_matching_via_nn.utils.utils import plot_indicator, TORCH_DTYPE
 from subgraph_matching_via_nn.graph_processors.graph_processors import GraphProcessor
 from subgraph_matching_via_nn.data.data_loaders import load_graph
 from subgraph_matching_via_nn.data.paths import *
@@ -101,7 +101,7 @@ class LocalizationBinarizationSimulator:
             print(k)
             _ = self.composite_nn.init_network_with_indicator(processed_sub_graph)
 
-            w_star = self.composite_solver.solve(G=sub_graph.G, G_sub=sub_graph.G_sub)
+            w_star = self.composite_solver.solve(G=sub_graph.G, G_sub=sub_graph.G_sub, dtype=TORCH_DTYPE)
 
             # x0 = self.composite_solver.set_initial_params_based_on_previous_optimum(w_star) #TODO?
 

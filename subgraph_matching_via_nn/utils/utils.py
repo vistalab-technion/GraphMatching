@@ -12,8 +12,8 @@ import seaborn as sns
 from subgraph_matching_via_nn.utils.graph_utils import \
     node_indicator_from_edge_indicator
 
-TORCH_DTYPE = torch.float64
-NP_DTYPE = np.float64
+TORCH_DTYPE = torch.float32
+NP_DTYPE = np.float32
 
 
 def plot_indicator(w_list, labels):
