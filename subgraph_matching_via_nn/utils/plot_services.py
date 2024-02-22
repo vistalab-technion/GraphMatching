@@ -37,7 +37,7 @@ class PlotServices:
         print(f"First {n_moments} moments: {[f'{value:.4f}' for value in moments]}")
 
     def plot_subgraph_indicators(self, G, to_line: bool, indicator_name_to_object_map: dict):
-        fig, axes = plt.subplots(1, len(indicator_name_to_object_map) + 1, figsize=[18, 4])
+        fig, axes = plt.subplots(1, len(indicator_name_to_object_map), figsize=[18, 4])
 
         axes_counter = 0
         for indicator_name, indicator_obj in indicator_name_to_object_map.items():
@@ -47,7 +47,6 @@ class PlotServices:
                                    ax=axes[axes_counter], seed=self.seed)
             axes_counter += 1
 
-        plot_graph_with_colors(G=G, title='gt sub', ax=axes[axes_counter], seed=self.seed)
         plt.show()
 
     def plot_subgraph_gt_vs_initial_indicators(self, sub_graph: SubGraph, processed_sub_graph: SubGraph, w_init, gt_indicator):
