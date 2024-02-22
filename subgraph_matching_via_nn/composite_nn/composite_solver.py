@@ -139,7 +139,7 @@ class BaseCompositeSolver(nn.Module):
         A = sub_graph.A_full
         A_sub = sub_graph.A_sub
 
-        return A, A_sub
+        return A, A_sub, G, G_sub
 
     def forward(self, input_graphs):
         """
@@ -152,30 +152,37 @@ class BaseCompositeSolver(nn.Module):
             graphs_distances_list.append(graphs_distance)
         return torch.stack(graphs_distances_list).unsqueeze(1)
 
-    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
-        A, A_sub = self.__pre_process_graphs(G, G_sub)
+    def __embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
+        A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
         embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
                                                  w=uniform_dist(A_sub.shape[0]).detach())
+
+        return A, A_sub, G, G_sub, embeddings_sub
+
+    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
+        A, A_sub, G, G_sub, embeddings_sub = self.__embedding_sub(G, G_sub, dtype)
         loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
         return loss + reg
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
-        A, A_sub = self.__pre_process_graphs(G, G_sub)
-        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
-                                                 w=uniform_dist(A_sub.shape[0]).detach())
+        A, A_sub, G, G_sub, embeddings_sub = self.__embedding_sub(G, G_sub, dtype)
 
         self.composite_nn.train() # Set the model to training mode
         optimizer = self._create_optimizer()
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
-            loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
-            full_loss = loss + reg
+            def closure():
+                loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
+                full_loss = loss + reg
 
-            optimizer.zero_grad()
-            full_loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                full_loss.backward()
 
-            self.__log_loss(iteration, loss, reg)
+                self.__log_loss(iteration, loss, reg)
+
+                return full_loss
+
+            optimizer.step(closure)
 
         w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().numpy()
         return w_star
