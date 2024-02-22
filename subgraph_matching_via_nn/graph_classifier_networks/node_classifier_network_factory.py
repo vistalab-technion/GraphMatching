@@ -25,6 +25,7 @@ class NodeClassifierNetworkFactory:
     @staticmethod
     def create_node_classifier_network(processed_G, last_layer_type: NodeClassifierLastLayerType,
                                        node_classifier_network_type: NodeClassifierNetworkType, params):
+        device = params['device']
         input_dim = len(processed_G.nodes())
         hidden_dim = 20
         output_dim = len(processed_G.nodes())
@@ -46,18 +47,21 @@ class NodeClassifierNetworkFactory:
                                                               hidden_dim=hidden_dim,
                                                               output_dim=output_dim,
                                                               classification_layer=last_layer,
-                                                              num_mid_layers=params['num_mid_layers']
+                                                              num_mid_layers=params['num_mid_layers'],
+                                                              device=device
                                                               )
         elif node_classifier_network_type == NodeClassifierNetworkType.Identity:
             node_classifier_network = IdentityNodeClassifierNetwork(output_dim=output_dim,
-                                                                    classification_layer=last_layer)
+                                                                    classification_layer=last_layer,
+                                                                    device=device)
         elif node_classifier_network_type == NodeClassifierNetworkType.GCN:
             node_classifier_network = GCNNodeClassifierNetwork(input_dim=1,
                                                                hidden_dim=hidden_dim,
                                                                num_classes=1,
-                                                               classification_layer=last_layer
+                                                               classification_layer=last_layer,
+                                                               device=device
                                                                )
         else:
             raise ValueError(f"Unsupported layer type: {node_classifier_network_type}")
 
-        return node_classifier_network
+        return node_classifier_network.to(device=device)

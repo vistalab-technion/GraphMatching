@@ -112,7 +112,7 @@ class LocalizationBinarizationSimulator:
     def save_localization_results(self, sub_graph, processed_sub_graph, w_all, w_init, output_dir_path, output_path):
         gt_indicator = sub_graph.edge_indicator if self.to_line else sub_graph.node_indicator
         gt_indicator_tensor = self.composite_nn.init_network_with_indicator(processed_sub_graph)
-        w_star = self.node_classifier_network(A = processed_sub_graph.A_full, params = self.params).detach().numpy()
+        w_star = self.node_classifier_network(A = processed_sub_graph.A_full, params = self.params).detach().cpu().numpy()
 
         localization_result = LocalizationResult()
         localization_result.sub_graph = sub_graph
@@ -167,7 +167,7 @@ class LocalizationBinarizationSimulator:
 
             self.build_localization_model(processed_sub_graph.G, sub_graph, self.params)
             w_init = self.node_classifier_network(A=processed_sub_graph.A_full,
-                                                  params=self.params).detach().numpy()
+                                                  params=self.params).detach().cpu().numpy()
 
             w_all = self.run_localization(sub_graph, processed_sub_graph)
 
@@ -198,7 +198,7 @@ class LocalizationBinarizationSimulator:
     def apply_binarization_scheme(solver: BaseCompositeSolver, processed_sub_graph, sub_graph, w_all, series_binarization_type: IndicatorBinarizationBootType, element_binarization_type: IndicatorBinarizationType, params):
         processed_G = processed_sub_graph.G
 
-        w_star = solver.composite_nn.node_classifier_network(A = processed_sub_graph.A_full, params = params).detach().numpy()
+        w_star = solver.composite_nn.node_classifier_network(A = processed_sub_graph.A_full, params = params).detach().cpu().numpy()
         w_star_dict = dict(zip(processed_G.nodes(), w_star))
 
         w_bin_dict = IndicatorDistributionBinarizer.from_indicators_series_to_binary_indicator(processed_G, w_all, w_star, params, series_binarization_type, element_binarization_type)

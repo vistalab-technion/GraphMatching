@@ -27,15 +27,20 @@ class BaseCompositeSolver(nn.Module):
     def compare_indicators(self, A_full_processed, indicator_name_to_object_map: dict, embedding_id):
         for indicator_name, indicator_object in indicator_name_to_object_map.items():
             embedding_nn = self.composite_nn.embedding_networks[embedding_id]
-            indicator_embedding = embedding_nn(w=torch.tensor(indicator_object, requires_grad=False),
+
+            indicator_embedding = embedding_nn(w=torch.tensor(indicator_object, requires_grad=False, device = self.params['device']),
                                                A=A_full_processed.detach()).type(TORCH_DTYPE)
             torch.set_printoptions(precision=4)
             print(
                 f"{[{value} for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
 
     def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
+        device = self.params['device']
         if A_sub_indicator is None:
             A_sub_indicator = uniform_dist(A_sub_processed.shape[0]).detach()
+        A_sub_indicator = A_sub_indicator.to(device=device)
+        gt_indicator_tensor = gt_indicator_tensor.to(device=device)
+
         embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
                                             w=A_sub_indicator)
 
@@ -155,7 +160,7 @@ class BaseCompositeSolver(nn.Module):
     def __embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
         A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
         embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
-                                                 w=uniform_dist(A_sub.shape[0]).detach())
+                                                 w=uniform_dist(A_sub.shape[0]).detach().to(device=self.params['device']))
 
         return A, A_sub, G, G_sub, embeddings_sub
 
@@ -184,15 +189,16 @@ class BaseCompositeSolver(nn.Module):
 
             optimizer.step(closure)
 
-        w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().numpy()
+        w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().cpu().numpy()
         return w_star
 
     def set_initial_params_based_on_previous_optimum(self, w_star):
         # binarized_w_star = IndicatorDistributionBinarizer.binarize(processed_G, w_star, self.params,
         #                                  binarization_type)
-        # w_th = torch.tensor(list(binarized_w_star.values()))
+        # w_th = torch.tensor(list(binarized_w_star.values()), device=device)
 
+        device = self.params['device']
         x0 = w_star-np.min(w_star)
-        x0 = torch.tensor(x0 / x0.sum())
+        x0 = torch.tensor(x0 / x0.sum(), device=device)
         self.composite_nn.node_classifier_network.init_params(default_weights=x0)
         return x0

@@ -15,16 +15,18 @@ from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 class CompositeNeuralNetwork(nn.Module):
     def __init__(self,
                  node_classifier_network: BaseNodeClassifierNetwork,
-                 embedding_networks: List[BaseGraphEmbeddingNetwork]):
+                 embedding_networks: List[BaseGraphEmbeddingNetwork],
+                 device):
         super().__init__()
 
-        self.node_classifier_network = node_classifier_network
-        self.embedding_networks = embedding_networks
+        self.node_classifier_network = node_classifier_network#.to(device=device)
 
         # avoid backward-propogating twice, since the composite_solver is in train mode
         for embedding_network in embedding_networks:
             for param in list(embedding_network.parameters()):
                 param.requires_grad_(False)
+
+        self.embedding_networks = embedding_networks
 
     def forward(self, A, x=None, params: dict = None):
         # compute node classifier

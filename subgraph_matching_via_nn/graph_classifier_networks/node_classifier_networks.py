@@ -17,12 +17,13 @@ import torchsort
 
 
 class BaseNodeClassifierNetwork(nn.Module):
-    def __init__(self, classification_layer, input_dim=None):
+    def __init__(self, classification_layer, device, input_dim=None):
         super().__init__()
         self.classification_layer = classification_layer
+        self.device = device
         # if input_dim is not None:
         #     self.register_buffer('uniform_input',
-        #                          torch.ones(1, input_dim, dtype=TORCH_DTYPE))
+        #                          torch.ones(1, input_dim, dtype=TORCH_DTYPE, device=self.device))
 
     def train_node_classifier(self,
                               G_sub: nx.graph = None,
@@ -38,16 +39,16 @@ class BaseNodeClassifierNetwork(nn.Module):
     def diff_binarize(w: torch.Tensor, params: dict):
         rank = torchsort.soft_rank(w.T, regularization_strength=0.1)
         idx = ((rank - params['m']) >= 0).squeeze()
-        w_th = torch.zeros_like(w)
+        w_th = torch.zeros_like(w, device=w.device)
         w_th[idx] = w[idx]
         return w_th
 
 
 class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, output_dim, classification_layer):
-        super().__init__(classification_layer=classification_layer, input_dim=None)
+    def __init__(self, output_dim, classification_layer, device):
+        super().__init__(classification_layer=classification_layer, input_dim=None, device=device)
 
-        self.weights = nn.Parameter(torch.Tensor(output_dim, 1).type(TORCH_DTYPE))
+        self.weights = nn.Parameter(torch.Tensor(output_dim, 1, device=self.device).type(TORCH_DTYPE))
         self.classification_layer = classification_layer
         self.init_params()
 
@@ -73,9 +74,9 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, input_dim, hidden_dim, output_dim, num_mid_layers,
-                 classification_layer):
+                 classification_layer, device):
         super().__init__(classification_layer=classification_layer,
-                         input_dim=input_dim)
+                         input_dim=input_dim, device=device)
 
         self.input_dim = input_dim
         self.fc_in = nn.Linear(input_dim, hidden_dim,
@@ -92,7 +93,9 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
     def forward(self, A, x=None, params: dict = None):
         if x is None:
-            x = torch.ones(1, self.input_dim, dtype=A.dtype)
+            x = torch.ones(1, self.input_dim, dtype=A.dtype, device=self.device)
+        else:
+            x = x.to(device=self.device)
 
         x = self.fc_in(x)  # Apply first fully-connected layer
         skip_x = x
@@ -110,10 +113,10 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, num_node_features_input, hidden_dim, num_node_features_output,
-                 classification_layer):
+                 classification_layer, device):
         super(GCNNodeClassifierNetwork, self).__init__(
             classification_layer=classification_layer,
-            input_dim=num_node_features_input)
+            input_dim=num_node_features_input, device=device)
         self.num_node_features_input = num_node_features_input
         self.conv1 = GCNConv(num_node_features_input, hidden_dim, dtype=TORCH_DTYPE)
         self.conv2 = GCNConv(hidden_dim, num_node_features_output, dtype=TORCH_DTYPE)
@@ -125,7 +128,9 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         edge_index = A.nonzero().t()
 
         if x is None:
-            x = torch.ones(A.shape[0], self.num_node_features_input)
+            x = torch.ones(A.shape[0], self.num_node_features_input, device=self.device)
+        else:
+            x = x.to(device=self.device)
         skip_x = self.skip_connection(x)
 
         x = self.conv1(x, edge_index)
@@ -138,11 +143,11 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 
 class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, num_nodes, embedding_dim, num_iterations, classification_layer):
-        super().__init__(classification_layer=classification_layer)
+    def __init__(self, num_nodes, embedding_dim, num_iterations, classification_layer, device):
+        super().__init__(classification_layer=classification_layer, device=device)
 
         # Initialization
-        self.L_learnable = nn.Parameter(torch.rand((num_nodes, num_nodes)))
+        self.L_learnable = nn.Parameter(torch.rand((num_nodes, num_nodes), device=self.device))
         self.num_iterations = num_iterations
         self.fc = nn.Linear(embedding_dim,
                             1)  # Sample output layer for binary classification
@@ -152,17 +157,17 @@ class GraphPowerIterationNetwork(BaseNodeClassifierNetwork):
         # For simplicity, we return an identity matrix
 
         spectral_op = L + rho
-        return torch.eye(w.size(0))
+        return torch.eye(w.size(0), device=self.device)
 
     def forward(self, rho, epsilon, initial_indicator=None):
         if initial_indicator is None:
-            w_k = torch.rand((self.L_learnable.size(0),))
+            w_k = torch.rand((self.L_learnable.size(0)), device=self.device)
         else:
-            w_k = initial_indicator
+            w_k = initial_indicator.to(device=self.device)
 
         for _ in range(self.num_iterations):
             L = self.L_learnable + rho * self.spectral_op(w_k)
-            y_k1 = torch.linalg.solve(L + epsilon * torch.eye(L.size(0)), w_k)
+            y_k1 = torch.linalg.solve(L + epsilon * torch.eye(L.size(0), device=self.device), w_k)
 
             # Update the indicator
             w_k = y_k1 / torch.norm(y_k1)

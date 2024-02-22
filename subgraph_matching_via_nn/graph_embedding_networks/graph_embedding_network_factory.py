@@ -45,4 +45,4 @@ class GraphEmbeddingNetworkFactory:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
             embedding_nns.append(embedding_nn)
 
-        return embedding_nns
+        return [embedding_nn.to(device=params['device']) for embedding_nn in embedding_nns]
