@@ -21,6 +21,11 @@ class CompositeNeuralNetwork(nn.Module):
         self.node_classifier_network = node_classifier_network
         self.embedding_networks = embedding_networks
 
+        # avoid backward-propogating twice, since the composite_solver is in train mode
+        for embedding_network in embedding_networks:
+            for param in list(embedding_network.parameters()):
+                param.requires_grad_(False)
+
     def forward(self, A, x=None, params: dict = None):
         # compute node classifier
         w = self.classify(A=A, x=x, params=params)
