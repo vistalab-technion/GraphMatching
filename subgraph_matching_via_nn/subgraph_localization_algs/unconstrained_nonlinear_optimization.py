@@ -26,7 +26,7 @@ def graph_entropy(A, w, params):
 
 def binary_penalty(A, w, params):
     # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
-    reg = torch.sum(w * (1 / params["m"] - w) ** 2)
+    reg = torch.sum(((w ** 2) * ((w-1/params['m']) ** 2)))
     return reg
 
 
