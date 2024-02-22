@@ -21,9 +21,6 @@ class BaseNodeClassifierNetwork(nn.Module):
         super().__init__()
         self.classification_layer = classification_layer
         self.device = device
-        # if input_dim is not None:
-        #     self.register_buffer('uniform_input',
-        #                          torch.ones(1, input_dim, dtype=TORCH_DTYPE, device=self.device))
 
     def train_node_classifier(self,
                               G_sub: nx.graph = None,
@@ -79,6 +76,10 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
                          input_dim=input_dim, device=device)
 
         self.input_dim = input_dim
+        if input_dim is not None:
+            self.register_buffer('x_stub',
+                                 torch.ones(1, input_dim, dtype=TORCH_DTYPE, device=self.device))
+
         self.fc_in = nn.Linear(input_dim, hidden_dim,
                                dtype=TORCH_DTYPE)  # First Fully-Connected Layer
         self.mid_layers = nn.Sequential()
@@ -93,7 +94,7 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
     def forward(self, A, x=None, params: dict = None):
         if x is None:
-            x = torch.ones(1, self.input_dim, dtype=A.dtype, device=self.device)
+            x = self.x_stub
         else:
             x = x.to(device=self.device)
 
@@ -128,7 +129,7 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         edge_index = A.nonzero().t()
 
         if x is None:
-            x = torch.ones(A.shape[0], self.num_node_features_input, device=self.device)
+            x = torch.ones(A.shape[0], self.num_node_features_input, device=self.device) #TODO: avoid recreating
         else:
             x = x.to(device=self.device)
         skip_x = self.skip_connection(x)
