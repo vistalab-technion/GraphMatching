@@ -76,7 +76,7 @@ def create_graph_metric_net(model_factory_func, device):
 
     return graph_metric_nn, model
 
-def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_params, dump_base_path = f".{os.sep}runlogs", graph_metric_nn_checkpoint_path=None):
+def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_params, dump_base_path = f".{os.sep}runlogs", graph_metric_nn_checkpoint_path=None, build_trainer=True):
 
     # must start on CPU to allow moving model to GPU, due to existing pytorch bug
     device = 'cpu'
@@ -90,8 +90,10 @@ def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_pa
         graph_metric_nn = torch.compile(graph_metric_nn)
         model = graph_metric_nn.embedding_networks[0].gnn_model
 
-    trainer = S2VGraphEmbeddingSimilarityMetricTrainer(graph_metric_nn, dump_base_path,
-                                      problem_params, solver_params)
+    trainer = None
+    if build_trainer:
+        trainer = S2VGraphEmbeddingSimilarityMetricTrainer(graph_metric_nn, dump_base_path,
+                                          problem_params, solver_params)
 
     return trainer, graph_metric_nn, model
 
@@ -889,6 +891,8 @@ def analyze_pairs_distances(trainer, graph_metric_nn, pairs, annotated_graphs, o
 
     out_source_distances = get_out_sources_max_distance(target_graph=self_graph, full_graph_adj=full_graph_with_multiple_isomorphic_graphs_adj_mat, source_graphs=source_graphs, graph_node_to_adj_node_map=graph_node_to_adj_node_map, device=device)
     print(f"out_source_distances= {out_source_distances}")
+
+    return train_positive_distances, train_negative_distances
 
 
 def load_dump_file_pairs_dataset(path, n_partitions=8): #88
