@@ -1,7 +1,7 @@
 from enum import Enum
 from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.classification_layer import \
     TopkSoftmaxClassificationLayer, SigmoidClassificationLayer, SoftmaxClassificationLayer, \
-    SquaredNormalizedClassificationLayer
+    SquaredNormalizedClassificationLayer, IdentityClassificationLayer
 from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks import NNNodeClassifierNetwork, \
     IdentityNodeClassifierNetwork, GCNNodeClassifierNetwork
 
@@ -11,6 +11,7 @@ class NodeClassifierLastLayerType(Enum):
     Sigmoid = 1,
     Softmax = 2,
     SquaredNormalized = 3,
+    Identity = 4,
 
 
 class NodeClassifierNetworkType(Enum):
@@ -27,7 +28,9 @@ class NodeClassifierNetworkFactory:
         input_dim = len(processed_G.nodes())
         hidden_dim = 20
         output_dim = len(processed_G.nodes())
-        if last_layer_type == NodeClassifierLastLayerType.TopKSoftmax:
+        if last_layer_type == NodeClassifierLastLayerType.Identity:
+            last_layer = IdentityClassificationLayer()
+        elif last_layer_type == NodeClassifierLastLayerType.TopKSoftmax:
             last_layer = TopkSoftmaxClassificationLayer(k=params["m"], default_temp=0.1, learnable_temp=False)
         elif last_layer_type == NodeClassifierLastLayerType.Sigmoid:
             last_layer = SigmoidClassificationLayer()
@@ -42,7 +45,8 @@ class NodeClassifierNetworkFactory:
             node_classifier_network = NNNodeClassifierNetwork(input_dim=input_dim,
                                                               hidden_dim=hidden_dim,
                                                               output_dim=output_dim,
-                                                              classification_layer=last_layer
+                                                              classification_layer=last_layer,
+                                                              num_mid_layers=params['num_mid_layers']
                                                               )
         elif node_classifier_network_type == NodeClassifierNetworkType.Identity:
             node_classifier_network = IdentityNodeClassifierNetwork(output_dim=output_dim,
