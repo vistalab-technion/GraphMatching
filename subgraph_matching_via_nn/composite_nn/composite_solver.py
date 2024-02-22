@@ -114,15 +114,19 @@ class BaseCompositeSolver(nn.Module):
     def _create_optimizer(self):
         lr = self.params['lr']
         solver_type = self.params.get("solver_type", None)
+        model_params = self.composite_nn.parameters()
         if solver_type == 'gd':
-            optimizer = optim.SGD(params=self.composite_nn.parameters(), lr=lr)
+            optimizer = optim.SGD(params=model_params, lr=lr)
         elif solver_type == 'lbfgs':
-            optimizer = optim.LBFGS(params=self.composite_nn.parameters(), lr=lr, max_iter=5,
+            optimizer = optim.LBFGS(params=model_params, lr=lr, max_iter=5,
                                     max_eval=None,
                                     tolerance_grad=1e-07,
                                     tolerance_change=1e-09,
                                     history_size=10,
                                     line_search_fn=None)
+        elif solver_type == 'adam':
+            weight_decay = self.params['weight_decay']
+            optimizer = optim.Adam(model_params, lr=lr, weight_decay=weight_decay)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
         return optimizer
