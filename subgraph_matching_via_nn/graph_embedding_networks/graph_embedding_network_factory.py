@@ -2,6 +2,7 @@ from enum import Enum
 from typing import List
 
 import torch
+from subgraph_matching_via_nn.graph_embedding_networks.gnn_embedding_network import GNNEmbeddingNetwork
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import MomentEmbeddingNetwork, \
     SpectralEmbeddingNetwork
 from subgraph_matching_via_nn.utils.graph_utils import laplacian
@@ -10,6 +11,7 @@ from subgraph_matching_via_nn.utils.graph_utils import laplacian
 class EmbeddingNetworkType(Enum):
     Moments = 0,
     Spectral = 1,
+    GraphCNN = 2,
 
 
 class GraphEmbeddingNetworkFactory:
@@ -35,6 +37,10 @@ class GraphEmbeddingNetworkFactory:
                                                         diagonal_scale=params['diagonal_scale'],
                                                         indicator_scale=indicator_size,
                                                         zero_eig_scale=params["zero_eig_scale"])
+            elif embedding_network_type == EmbeddingNetworkType.GraphCNN:
+                model_factory_func = params["graphcnn_factory_func"]
+                model = model_factory_func(device='cpu')
+                embedding_nn = GNNEmbeddingNetwork(gnn_model=model)
             else:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
             embedding_nns.append(embedding_nn)
