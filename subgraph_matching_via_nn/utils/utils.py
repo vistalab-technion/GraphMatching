@@ -1,6 +1,5 @@
 from typing import Union
 
-import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 import torch
@@ -9,6 +8,7 @@ import numpy as np
 from scipy.stats import norm
 import seaborn as sns
 
+from common.graph_utils import SubGraphGenerator
 from subgraph_matching_via_nn.utils.graph_utils import \
     node_indicator_from_edge_indicator
 
@@ -123,10 +123,15 @@ def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
     # Create symmetric adjacency matrix
     num_nodes = len(G.nodes())
     adj_matrix = np.zeros((num_nodes, num_nodes))
+    # generate adjacency matrix with graph nodes mapping to the matrix indices
+    _, graph_node_to_adj_node_map = SubGraphGenerator.generate_adj_matrix_with_nodes_mapping(
+        G)
 
     for (i, j), val in edge_indicator.items():
-        adj_matrix[i][j] = val
-        adj_matrix[j][i] = val  # Ensure it's symmetric
+        mapped_i = graph_node_to_adj_node_map[i]
+        mapped_j = graph_node_to_adj_node_map[j]
+        adj_matrix[mapped_i][mapped_j] = val
+        adj_matrix[mapped_j][mapped_i] = val  # Ensure it's symmetric
 
     return edge_indicator, adj_matrix
 
