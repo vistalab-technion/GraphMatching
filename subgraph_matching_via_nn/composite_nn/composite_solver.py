@@ -29,10 +29,11 @@ class BaseCompositeSolver(nn.Module):
             embedding_nn = self.composite_nn.embedding_networks[embedding_id]
             indicator_embedding = embedding_nn(w=torch.tensor(indicator_object, requires_grad=False),
                                                A=A_full_processed.detach()).type(TORCH_DTYPE)
+            torch.set_printoptions(precision=4)
             print(
-                f"{[f'{value:.4f}' for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
+                f"{[{value} for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
 
-    def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None):
+    def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
         if A_sub_indicator is None:
             A_sub_indicator = uniform_dist(A_sub_processed.shape[0]).detach()
         embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
@@ -49,27 +50,36 @@ class BaseCompositeSolver(nn.Module):
 
         embedding_nns = self.composite_nn.embedding_networks
         embedding_nns_amount = len(embedding_nns)
-        if len(embeddings_full) != embedding_nns_amount:
-            print(
-                f"{[f'{value:.4f}' for value in embeddings_full[0]]} : init")
-            print(
-                f"{[f'{value:.4f}' for value in embeddings_sub[0]]} : sub")
-            print(
-                f"{[f'{value:.4f}' for value in embeddings_gt[0]]} : GT")
-        else:
-            for idx in range(embedding_nns_amount):
+
+        if print_embeddings:
+
+            torch.set_printoptions(precision=4)
+
+            if len(embeddings_full) != embedding_nns_amount:
                 print(
-                    f"{[f'{value:.4f}' for value in embeddings_full[idx]]} : init {embedding_nns[idx].embedding_type}")
+                    f"{[{value} for value in embeddings_full[0]]} : init")
                 print(
-                    f"{[f'{value:.4f}' for value in embeddings_sub[idx]]} : sub {embedding_nns[idx].embedding_type}")
+                    f"{[{value} for value in embeddings_sub[0]]} : sub")
                 print(
-                    f"{[f'{value:.4f}' for value in embeddings_gt[idx]]} : GT {embedding_nns[idx].embedding_type}")
+                    f"{[{value} for value in embeddings_gt[0]]} : GT")
+            else:
+                for idx in range(embedding_nns_amount):
+                    print(
+                        f"{[{value} for value in embeddings_full[idx]]} : init {embedding_nns[idx].embedding_type}")
+                    print(
+                        f"{[{value} for value in embeddings_sub[idx]]} : sub {embedding_nns[idx].embedding_type}")
+                    print(
+                        f"{[{value} for value in embeddings_gt[idx]]} : GT {embedding_nns[idx].embedding_type}")
 
         print(f"init loss (no reg): {loss}")  # without regularization
-
         reg = self._get_reg_loss(A_full_processed, w)
         full_loss = loss + reg
         print(f"init full loss (with reg): {full_loss}")  # with regularization
+
+        print(f"ref loss (no reg): {ref_loss}")  # without regularization
+        ref_loss_reg = self._get_reg_loss(A_full_processed, gt_indicator_tensor)
+        full_ref_loss = ref_loss + ref_loss_reg
+        print(f"ref full loss (with reg): {full_ref_loss}")  # with regularization
 
         return loss, ref_loss
 
@@ -98,7 +108,7 @@ class BaseCompositeSolver(nn.Module):
             print(f"Iteration {iteration}, Loss: {loss.item()}")
             print(f"Iteration {iteration}, Reg: {reg.item()}")
             print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
-            self.liveloss.update({'loss': loss.item()})
+            self.liveloss.update({'data term': loss.item(), 'reg': reg.item(), 'full_loss': full_loss.item()})
             self.liveloss.send()
 
     def _create_optimizer(self):
