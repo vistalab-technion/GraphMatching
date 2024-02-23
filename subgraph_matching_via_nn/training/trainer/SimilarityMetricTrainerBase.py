@@ -348,8 +348,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                     #                           best_val_loss, dump_path)
 
                     print(f"finished epoch {epoch_ctr} best_val_loss = {best_val_loss}", flush=True)
-                    liveloss.update({'epoch train loss': epoch_train_loss})
-                    liveloss.update({'epoch val loss': epoch_val_loss})
+                    liveloss.update({'epoch train loss': epoch_train_loss, 'epoch val loss': epoch_val_loss})
                     liveloss.send()
 
                     # save updated best model (with stats) post epoch
