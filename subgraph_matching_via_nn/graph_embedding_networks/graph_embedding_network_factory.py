@@ -40,7 +40,7 @@ class GraphEmbeddingNetworkFactory:
             elif embedding_network_type == EmbeddingNetworkType.GraphCNN:
                 model_factory_func = params["graphcnn_factory_func"]
                 model = model_factory_func(device='cpu')
-                embedding_nn = GNNEmbeddingNetwork(gnn_model=model)
+                embedding_nn = GNNEmbeddingNetwork(gnn_model=model, params=params)
             else:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
             embedding_nns.append(embedding_nn)

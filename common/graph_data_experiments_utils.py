@@ -49,13 +49,13 @@ import time
 from common.wmds.wmds_r_wrapper import apply_wmds
 
 
-def create_graph_metric_net(model_factory_func, device):
+def create_graph_metric_net(model_factory_func, device, params):
     model = model_factory_func(device=device)
 
     loss_fun = torch.nn.MSELoss()
     embedding_metric_network = EmbeddingMetricNetwork(loss_fun=loss_fun)
 
-    gnn_embedding_nn = GNNEmbeddingNetwork(gnn_model=model)
+    gnn_embedding_nn = GNNEmbeddingNetwork(gnn_model=model, params=params)
 
     # embedding_nns = \
     #     [
@@ -80,7 +80,11 @@ def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_pa
 
     # must start on CPU to allow moving model to GPU, due to existing pytorch bug
     device = 'cpu'
-    graph_metric_nn, model = create_graph_metric_net(model_factory_func, device)
+    device_key = 'device'
+    if device_key in solver_params:
+        device = solver_params[device_key]
+
+    graph_metric_nn, model = create_graph_metric_net(model_factory_func, device, solver_params)
 
     if graph_metric_nn_checkpoint_path is not None:
         graph_metric_nn.load_state_dict(torch.load(graph_metric_nn_checkpoint_path, map_location=device))
