@@ -47,6 +47,7 @@ import matplotlib.pyplot as plt
 from livelossplot import PlotLosses
 import time
 from common.wmds.wmds_r_wrapper import apply_wmds
+from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
 def create_graph_metric_net(model_factory_func, device, params):
@@ -89,6 +90,7 @@ def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_pa
     if graph_metric_nn_checkpoint_path is not None:
         graph_metric_nn.load_state_dict(torch.load(graph_metric_nn_checkpoint_path, map_location=device))
         model = graph_metric_nn.embedding_networks[0].gnn_model
+        model = model.to(dtype=TORCH_DTYPE)
 
     if solver_params['is_use_model_compliation']:
         graph_metric_nn = torch.compile(graph_metric_nn)
@@ -140,7 +142,7 @@ def generate_s2v_graphs(networkx_graphs, device, print_stats=True):
     for s2v_graph in graphs:
         # convert graph features here, not only in trainer! (heatmap is probably wrong)
         annotated_graph = AnnotatedGraph(s2v_graph.g)
-        s2v_graph.node_features = annotated_graph.node_indicator.to(device=device)
+        s2v_graph.node_mask = annotated_graph.node_indicator.to(device=device)
 
     return graphs
 

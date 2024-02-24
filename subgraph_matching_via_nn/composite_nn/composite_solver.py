@@ -25,10 +25,13 @@ class BaseCompositeSolver(nn.Module):
         self.liveloss = PlotLosses(mode='notebook')
 
     def compare_indicators(self, A_full_processed, indicator_name_to_object_map: dict, embedding_id):
+        device = self.params['device']
+
+        A_full_processed = A_full_processed.to(device=device)
         for indicator_name, indicator_object in indicator_name_to_object_map.items():
             embedding_nn = self.composite_nn.embedding_networks[embedding_id]
 
-            indicator_embedding = embedding_nn(w=torch.tensor(indicator_object, requires_grad=False, device = self.params['device']),
+            indicator_embedding = embedding_nn(w=torch.tensor(indicator_object, requires_grad=False, device=device),
                                                A=A_full_processed.detach()).type(TORCH_DTYPE)
             torch.set_printoptions(precision=4)
             print(
@@ -40,6 +43,8 @@ class BaseCompositeSolver(nn.Module):
             A_sub_indicator = uniform_dist(A_sub_processed.shape[0]).detach()
         A_sub_indicator = A_sub_indicator.to(device=device)
         gt_indicator_tensor = gt_indicator_tensor.to(device=device)
+        A_sub_processed = A_sub_processed.to(device=device)
+        A_full_processed = A_full_processed.to(device=device)
 
         embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
                                             w=A_sub_indicator)
@@ -159,6 +164,10 @@ class BaseCompositeSolver(nn.Module):
 
     def __embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
         A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
+        device = self.params['device']
+        A = A.to(device=device)
+        A_sub = A_sub.to(device=device)
+
         embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
                                                  w=uniform_dist(A_sub.shape[0]).detach().to(device=self.params['device']))
 

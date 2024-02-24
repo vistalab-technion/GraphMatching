@@ -6,6 +6,7 @@ from subgraph_matching_via_nn.graph_embedding_networks.gnn_embedding_network imp
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import MomentEmbeddingNetwork, \
     SpectralEmbeddingNetwork
 from subgraph_matching_via_nn.utils.graph_utils import laplacian
+from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
 class EmbeddingNetworkType(Enum):
@@ -45,4 +46,4 @@ class GraphEmbeddingNetworkFactory:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
             embedding_nns.append(embedding_nn)
 
-        return [embedding_nn.to(device=params['device']) for embedding_nn in embedding_nns]
+        return [embedding_nn.to(device=params['device'], dtype=TORCH_DTYPE) for embedding_nn in embedding_nns]

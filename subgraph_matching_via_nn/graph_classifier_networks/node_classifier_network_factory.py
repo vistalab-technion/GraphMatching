@@ -4,6 +4,7 @@ from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.cla
     SquaredNormalizedClassificationLayer, IdentityClassificationLayer
 from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks import NNNodeClassifierNetwork, \
     IdentityNodeClassifierNetwork, GCNNodeClassifierNetwork
+from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
 class NodeClassifierLastLayerType(Enum):
@@ -64,4 +65,4 @@ class NodeClassifierNetworkFactory:
         else:
             raise ValueError(f"Unsupported layer type: {node_classifier_network_type}")
 
-        return node_classifier_network.to(device=device)
+        return node_classifier_network.to(device=device, dtype=TORCH_DTYPE)

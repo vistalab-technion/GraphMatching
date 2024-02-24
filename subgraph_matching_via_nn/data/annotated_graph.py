@@ -29,7 +29,7 @@ class AnnotatedGraph(object):
 
         if node_attributes is None:
             n = len(g.nodes)
-            node_attributes = torch.zeros(n, device=device)
+            node_attributes = torch.zeros(n, device=device, dtype=TORCH_DTYPE)
             degrees_map = dict(nx.degree(g))
             n_non_isolated_nodes = len(
                 list(filter(lambda val: val > 0, list(degrees_map.values()))))
