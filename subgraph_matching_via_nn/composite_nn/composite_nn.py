@@ -9,6 +9,7 @@ from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks
     BaseNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import \
     BaseGraphEmbeddingNetwork
+from subgraph_matching_via_nn.mask_binarization.binarized_modules import quantize
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
@@ -48,6 +49,9 @@ class CompositeNeuralNetwork(nn.Module):
 
     def classify(self, A, x, params: dict = None):
         w = self.node_classifier_network(A=A, x=x, params=params)
+        if params.get('apply_quantization', None):
+            # w = binarized(w, quant_mode="det")
+            w = quantize(w, quant_mode="det", numBits=5)
         return w
 
     def init_params(self, **kwargs):

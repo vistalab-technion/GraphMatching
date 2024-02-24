@@ -10,7 +10,6 @@ import networkx as nx
 
 from subgraph_matching_via_nn.graph_generators.graph_generators import \
     BaseGraphGenerator
-from subgraph_matching_via_nn.mask_binarization.binarized_modules import binarized, quantize
 from subgraph_matching_via_nn.utils.graph_utils import hamiltonian
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 import torchsort
@@ -55,8 +54,6 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
         # x = self.diff_binarize(x, params)
         # todo: add function for internal operations. In Identity it will be pass
         w = self.classification_layer(A, x)
-        # w = binarized(w, quant_mode="det")
-        w = quantize(w, quant_mode="det", numBits=5)
 
         return w
 
