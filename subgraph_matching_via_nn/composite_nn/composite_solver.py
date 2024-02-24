@@ -35,7 +35,7 @@ class BaseCompositeSolver(nn.Module):
                                                A=A_full_processed.detach()).type(TORCH_DTYPE)
             torch.set_printoptions(precision=4)
             print(
-                f"{[{value} for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
+                f"{[value for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
 
     def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
         device = self.params['device']
@@ -67,19 +67,19 @@ class BaseCompositeSolver(nn.Module):
 
             if len(embeddings_full) != embedding_nns_amount:
                 print(
-                    f"{[{value} for value in embeddings_full[0]]} : init")
+                    f"{[value for value in embeddings_full[0]]} : init")
                 print(
-                    f"{[{value} for value in embeddings_sub[0]]} : sub")
+                    f"{[value for value in embeddings_sub[0]]} : sub")
                 print(
-                    f"{[{value} for value in embeddings_gt[0]]} : GT")
+                    f"{[value for value in embeddings_gt[0]]} : GT")
             else:
                 for idx in range(embedding_nns_amount):
                     print(
-                        f"{[{value} for value in embeddings_full[idx]]} : init {embedding_nns[idx].embedding_type}")
+                        f"{[value for value in embeddings_full[idx]]} : init {embedding_nns[idx].embedding_type}")
                     print(
-                        f"{[{value} for value in embeddings_sub[idx]]} : sub {embedding_nns[idx].embedding_type}")
+                        f"{[value for value in embeddings_sub[idx]]} : sub {embedding_nns[idx].embedding_type}")
                     print(
-                        f"{[{value} for value in embeddings_gt[idx]]} : GT {embedding_nns[idx].embedding_type}")
+                        f"{[value for value in embeddings_gt[idx]]} : GT {embedding_nns[idx].embedding_type}")
 
         print(f"init loss (no reg): {loss}")  # without regularization
         reg = self._get_reg_loss(A_full_processed, w)
