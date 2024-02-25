@@ -56,9 +56,9 @@ class NodeClassifierNetworkFactory:
                                                                     classification_layer=last_layer,
                                                                     device=device)
         elif node_classifier_network_type == NodeClassifierNetworkType.GCN:
-            node_classifier_network = GCNNodeClassifierNetwork(input_dim=1,
+            node_classifier_network = GCNNodeClassifierNetwork(num_node_features_input=1,
                                                                hidden_dim=hidden_dim,
-                                                               num_classes=1,
+                                                               num_node_features_output=1,
                                                                classification_layer=last_layer,
                                                                device=device
                                                                )
