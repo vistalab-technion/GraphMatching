@@ -3,6 +3,9 @@ url = "https://pypi.python.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[requires]
+python_version = "3.8"
+
 [packages]
 requests = "*"
 numpy = "*"
@@ -26,6 +29,7 @@ loss_landscapes = "*"
 seaborn = "*"
 torchsort = "*"
 polyrat = "*"
+jupyter = "*"
 
 [dev-packages]
 pytest = "*"
