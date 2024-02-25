@@ -118,17 +118,17 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
             classification_layer=classification_layer,
             input_dim=num_node_features_input, device=device)
         self.num_node_features_input = num_node_features_input
-        self.conv1 = GCNConv(num_node_features_input, hidden_dim, dtype=TORCH_DTYPE)
-        self.conv2 = GCNConv(hidden_dim, num_node_features_output, dtype=TORCH_DTYPE)
+        self.conv1 = GCNConv(num_node_features_input, hidden_dim).to(dtype=TORCH_DTYPE)
+        self.conv2 = GCNConv(hidden_dim, num_node_features_output).to(dtype=TORCH_DTYPE)
         self.skip_connection = nn.Identity(num_node_features_input,
-                                           num_node_features_output,
-                                           dtype=TORCH_DTYPE)  # Skip connection
+                                           num_node_features_output)\
+            .to(dtype=TORCH_DTYPE)  # Skip connection
 
     def forward(self, A, x=None, params: dict = None):
         edge_index = A.nonzero().t()
 
         if x is None:
-            x = torch.ones(A.shape[0], self.num_node_features_input, device=self.device) #TODO: avoid recreating
+            x = torch.ones(A.shape[0], self.num_node_features_input, dtype=TORCH_DTYPE, device=self.device) #TODO: avoid recreating
         else:
             x = x.to(device=self.device)
         skip_x = self.skip_connection(x)
