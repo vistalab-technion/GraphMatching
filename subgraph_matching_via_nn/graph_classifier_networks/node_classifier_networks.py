@@ -44,7 +44,9 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
     def __init__(self, output_dim, classification_layer, device):
         super().__init__(classification_layer=classification_layer, input_dim=None, device=device)
 
-        self.weights = nn.Parameter(torch.Tensor(output_dim, 1, device='cpu').type(TORCH_DTYPE)).to(device=self.device)
+        weights_tensor = torch.rand((output_dim, 1), dtype=TORCH_DTYPE, device=self.device)
+
+        self.weights = nn.Parameter(weights_tensor)
         self.classification_layer = classification_layer
         self.init_params()
 
