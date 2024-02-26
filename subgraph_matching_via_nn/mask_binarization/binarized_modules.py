@@ -6,6 +6,9 @@ from torch.autograd.function import InplaceFunction
 class Binarize(InplaceFunction):
 
     def forward(ctx,input,quant_mode='det',allow_scale=False,inplace=False):
+        device = input.device
+        dtype = input.dtype
+
         ctx.inplace = inplace
         if ctx.inplace:
             ctx.mark_dirty(input)
@@ -18,7 +21,7 @@ class Binarize(InplaceFunction):
         if quant_mode=='det':
             return output.div(scale).sign().mul(scale)
         else:
-            return output.div(scale).add_(1).div_(2).add_(torch.rand(output.size()).add(-0.5)).clamp_(0,1).round().mul_(2).add_(-1).mul(scale)
+            return output.div(scale).add_(1).div_(2).add_(torch.rand(output.size(), device=device, dtype=dtype).add(-0.5)).clamp_(0,1).round().mul_(2).add_(-1).mul(scale)
 
     def backward(ctx,grad_output):
         #STE
@@ -29,6 +32,8 @@ class Binarize(InplaceFunction):
 class Quantize(InplaceFunction):
 
     def forward(ctx,input,quant_mode='det',numBits=4,inplace=False):
+        device = input.device
+        dtype = input.dtype
         ctx.inplace = inplace
         if ctx.inplace:
             ctx.mark_dirty(input)
@@ -40,7 +45,7 @@ class Quantize(InplaceFunction):
         if quant_mode=='det':
             output=output.round().div(scale)
         else:
-            output=output.round().add(torch.rand(output.size()).add(-0.5)).div(scale)
+            output=output.round().add(torch.rand(output.size(), device=device, dtype=dtype).add(-0.5)).div(scale)
         return output
 
     def backward(ctx, grad_output):
