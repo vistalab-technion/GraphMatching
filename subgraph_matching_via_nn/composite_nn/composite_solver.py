@@ -198,7 +198,7 @@ class BaseCompositeSolver(nn.Module):
 
             optimizer.step(closure)
 
-        w_star = self.composite_nn.node_classifier_network(A=A, params=self.params).detach().cpu().numpy()
+        w_star = self.composite_nn.classify(A=A, params=self.params).detach().cpu().numpy()
         return w_star
 
     def set_initial_params_based_on_previous_optimum(self, w_star):
