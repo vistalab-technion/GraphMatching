@@ -60,12 +60,13 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
         return w
 
     def init_params(self, default_weights=None):
-        if default_weights is None:
-            self.weights.data.fill_(1 / len(self.weights))
-        else:
-            self.weights.data = default_weights
+        with torch.no_grad():
+            if default_weights is None:
+                self.weights.data.fill_(1 / len(self.weights))
+            else:
+                self.weights.data = default_weights
 
-        self.classification_layer.init_weights()
+            self.classification_layer.init_weights()
 
 
 class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):

@@ -38,11 +38,12 @@ class SigmoidClassificationLayer(BaseClassificationLayer):
         return torch.sigmoid(self._temp_param * x)
 
     def init_weights(self, init_value=None):
-        if init_value is None:
-            self._temp_param.data.fill_(
-                self._default_temp)
-        else:
-            self._temp_param.data = init_value
+        with torch.no_grad():
+            if init_value is None:
+                self._temp_param.data.fill_(
+                    self._default_temp)
+            else:
+                self._temp_param.data = init_value
 
 
 class SoftmaxClassificationLayer(BaseClassificationLayer):
