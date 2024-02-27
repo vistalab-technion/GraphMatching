@@ -31,19 +31,21 @@ class CompositeNeuralNetwork(nn.Module):
         self.embedding_networks = embedding_networks
         self.quantize_layer = QuantizeLayer()
 
-    def forward(self, A, x=None, params: dict = None):
+        self.last_w = None
+
+    def forward(self, A, x=None, params: dict = None, is_use_last_args: bool = False):
         # compute node classifier
         w = self.classify(A=A, x=x, params=params)
 
         # compute embedding
-        embeddings = self.embed(A=A, w=w, params=params)
+        embeddings = self.embed(A=A, w=w, params=params, is_use_last_args=is_use_last_args)
 
         return embeddings, w
 
-    def embed(self, A, w, params: dict = None):
+    def embed(self, A, w, params: dict = None, is_use_last_args: bool = False):
         embeddings = []
         for embedding_network in self.embedding_networks:
-            embeddings.append(embedding_network(A=A, w=w, params=params))
+            embeddings.append(embedding_network(A=A, w=w, params=params, is_use_last_args=is_use_last_args))
             # TODO: apply mlp. for example
             #  ||a(emb1-emb1_gt)||^2+||b(emb2-emb2_gt)||^2  s.t. (a^2+b^2)=1
             #  total_emb = mlp(embeddings) - > ||total_emb - total_emb_gt||^2
