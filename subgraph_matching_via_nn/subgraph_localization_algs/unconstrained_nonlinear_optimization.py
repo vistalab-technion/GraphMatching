@@ -18,6 +18,13 @@ def graph_total_variation(A, w, params):
     total_variation = (0.5 * w.T @ L @ w).squeeze()
     return total_variation
 
+def graph_nodes_number(A, w, params):
+    reg = torch.pow(torch.sum(w) - params['m'], 2)
+    return reg
+
+def graph_edges_number(A, w, params):
+    reg = torch.pow(torch.sum(w * params['m'] * A * w.T * params['m']) / 2 - params['n'], 2)
+    return reg
 
 def graph_entropy(A, w, params):
     H = - w.T @ torch.log(w)
