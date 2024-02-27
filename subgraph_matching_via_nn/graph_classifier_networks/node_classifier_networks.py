@@ -84,7 +84,7 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
                                dtype=TORCH_DTYPE)  # First Fully-Connected Layer
         self.mid_layers = nn.Sequential()
         for i in range(num_mid_layers):
-            self.mid_layers.add_module(name="fc_{i}",
+            self.mid_layers.add_module(name=f"fc_{i}",
                                        module=nn.Linear(hidden_dim, hidden_dim,
                                                         dtype=TORCH_DTYPE))
             self.mid_layers.add_module(name=f"relu_{i}", module=nn.ReLU())
