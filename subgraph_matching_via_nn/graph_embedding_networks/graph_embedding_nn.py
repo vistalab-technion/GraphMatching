@@ -11,7 +11,7 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         pass
 
     @property

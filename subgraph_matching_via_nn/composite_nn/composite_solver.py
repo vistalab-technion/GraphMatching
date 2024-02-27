@@ -101,9 +101,9 @@ class BaseCompositeSolver(nn.Module):
             return 0
         return torch.stack(reg_terms_list).sum()
 
-    def get_composite_loss_terms(self, A, embeddings_sub):
+    def get_composite_loss_terms(self, A, embeddings_sub, is_use_last_args=False):
         x0 = self.params.get("x0", None)
-        embeddings_full, w = self.composite_nn(A, x0, self.params)
+        embeddings_full, w = self.composite_nn(A, x0, self.params, is_use_last_args=is_use_last_args)
 
         loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
                                         embeddings_subgraph=embeddings_sub)
@@ -186,7 +186,9 @@ class BaseCompositeSolver(nn.Module):
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
             def closure():
-                loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
+                is_use_last_args = (iteration > 0)
+
+                loss, reg = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
                 full_loss = loss + reg
 
                 optimizer.zero_grad()
