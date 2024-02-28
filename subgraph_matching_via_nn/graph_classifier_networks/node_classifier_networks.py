@@ -12,7 +12,7 @@ from subgraph_matching_via_nn.graph_generators.graph_generators import \
     BaseGraphGenerator
 from subgraph_matching_via_nn.utils.graph_utils import hamiltonian
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
-import torchsort
+# import torchsort
 
 
 class BaseNodeClassifierNetwork(nn.Module):
@@ -31,13 +31,13 @@ class BaseNodeClassifierNetwork(nn.Module):
     def init_params(self, default_weights=None):
         pass
 
-    @staticmethod
-    def diff_binarize(w: torch.Tensor, params: dict):
-        rank = torchsort.soft_rank(w.T, regularization_strength=0.1)
-        idx = ((rank - params['m']) >= 0).squeeze()
-        w_th = torch.zeros_like(w, device=w.device)
-        w_th[idx] = w[idx]
-        return w_th
+    # @staticmethod
+    # def diff_binarize(w: torch.Tensor, params: dict):
+    #     rank = torchsort.soft_rank(w.T, regularization_strength=0.1)
+    #     idx = ((rank - params['m']) >= 0).squeeze()
+    #     w_th = torch.zeros_like(w, device=w.device)
+    #     w_th[idx] = w[idx]
+    #     return w_th
 
 
 class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
