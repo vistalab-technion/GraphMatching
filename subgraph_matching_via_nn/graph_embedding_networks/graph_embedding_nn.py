@@ -37,7 +37,7 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._moments_type = moments_type
         self._n_moments = n_moments
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         if self._moments_type == 'standardized_central':
             embedding = self.compute_standardized_central_moments(w, A, self._n_moments)
         elif self._moments_type == 'standardized_raw':
@@ -126,7 +126,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._indicator_scale = indicator_scale
         self._zero_eig_scale = zero_eig_scale
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         H = self.spectral_operator(A, w)
         evals, evecs = torch.linalg.eigh(H)
         embedding = evals[:self._n_eigs]
