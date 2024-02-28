@@ -44,6 +44,9 @@ class GraphEmbeddingNetworkFactory:
                 embedding_nn = GNNEmbeddingNetwork(gnn_model=model, params=params)
             else:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
+
+            if params['is_use_model_compliation']:
+                embedding_nn = torch.compile(embedding_nn)
             embedding_nns.append(embedding_nn)
 
         return [embedding_nn.to(device=params['device'], dtype=TORCH_DTYPE) for embedding_nn in embedding_nns]
