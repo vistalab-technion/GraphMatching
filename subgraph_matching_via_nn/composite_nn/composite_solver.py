@@ -109,17 +109,17 @@ class BaseCompositeSolver(nn.Module):
                                         embeddings_subgraph=embeddings_sub)
 
         reg = self._get_reg_loss(A, w)
-        return loss, reg
+        return loss, reg, w
 
-    def __log_loss(self, iteration, loss, reg):
+    def __log_loss(self, iteration, loss, reg, w):
         if iteration % self.params['k_update_plot'] == 0:
             full_loss = loss + reg
-
+            self.liveloss.update({'data term': loss.item(), 'reg': reg.item(), 'full_loss': full_loss.item()})
+            self.liveloss.send()
             print(f"Iteration {iteration}, Loss: {loss.item()}")
             print(f"Iteration {iteration}, Reg: {reg.item()}")
             print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
-            self.liveloss.update({'data term': loss.item(), 'reg': reg.item(), 'full_loss': full_loss.item()})
-            self.liveloss.send()
+            print(f"Iteration {iteration}, w: {w}")
 
     def _create_optimizer(self):
         lr = self.params['lr']
@@ -175,7 +175,7 @@ class BaseCompositeSolver(nn.Module):
 
     def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
         A, A_sub, G, G_sub, embeddings_sub = self.__embedding_sub(G, G_sub, dtype)
-        loss, reg = self.get_composite_loss_terms(A, embeddings_sub)
+        loss, reg, _ = self.get_composite_loss_terms(A, embeddings_sub)
         return loss + reg
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
@@ -188,13 +188,13 @@ class BaseCompositeSolver(nn.Module):
             def closure():
                 is_use_last_args = (iteration > 0)
 
-                loss, reg = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
+                loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
                 full_loss = loss + reg
 
                 optimizer.zero_grad()
                 full_loss.backward()
 
-                self.__log_loss(iteration, loss, reg)
+                self.__log_loss(iteration, loss, reg, w)
 
                 return full_loss
 
