@@ -12,12 +12,13 @@ class BaseEmbeddingMetricNetwork(nn.Module):
 
 
 class EmbeddingMetricNetwork(BaseEmbeddingMetricNetwork):
-    def __init__(self, loss_fun: _Loss):
+    def __init__(self, loss_fun: _Loss, params: dict):
         """
 
         :param loss_fun: a torch loss function
         """
         super().__init__(loss_fun)
+        self.params = params
 
     def forward(self, embeddings_full, embeddings_subgraph, is_sum_tensor_into_single_item=True):
         """
@@ -29,8 +30,11 @@ class EmbeddingMetricNetwork(BaseEmbeddingMetricNetwork):
         True for returning the sum of pair losses as a single element
         :return: loss between embeddings
         """
+
+        scaler = self.params['scaler']
+
         if isinstance(embeddings_full, list):
-            losses = [self._loss_fun(embedding_full, embedding_subgraph)
+            losses = [self._loss_fun(embedding_full / scaler, embedding_subgraph / scaler)
                       for embedding_full, embedding_subgraph in zip(embeddings_full, embeddings_subgraph)]
             losses = torch.stack(losses)
 

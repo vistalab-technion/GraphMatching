@@ -54,7 +54,7 @@ def create_graph_metric_net(model_factory_func, device, params):
     model = model_factory_func(device=device)
 
     loss_fun = torch.nn.MSELoss()
-    embedding_metric_network = EmbeddingMetricNetwork(loss_fun=loss_fun)
+    embedding_metric_network = EmbeddingMetricNetwork(loss_fun=loss_fun, params=params)
 
     gnn_embedding_nn = GNNEmbeddingNetwork(gnn_model=model, params=params)
 

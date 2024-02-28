@@ -19,11 +19,15 @@ def graph_total_variation(A, w, params):
     return total_variation
 
 def graph_nodes_number(A, w, params):
-    reg = torch.pow(torch.sum(w) - params['m'], 2)
+    scaler = params['scaler']
+    raw_diff = torch.sum(w) - params['m']
+    reg = torch.pow(raw_diff / scaler, 2)
     return reg
 
 def graph_edges_number(A, w, params):
-    reg = torch.pow(torch.sum(w * params['m'] * A * w.T * params['m']) / 2 - params['n'], 2)
+    scaler = params['scaler']
+    raw_diff = torch.sum(w * params['m'] * A * w.T * params['m']) / 2 - params['n']
+    reg = torch.pow(raw_diff / scaler, 2)
     return reg
 
 def graph_entropy(A, w, params):
@@ -32,8 +36,8 @@ def graph_entropy(A, w, params):
 
 
 def binary_penalty(A, w, params):
-    # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
-    reg = torch.sum(((w ** 2) * ((w-1/params['m']) ** 2)))
+    scaler = params['scaler']
+    reg = torch.sum(((w ** 2) / scaler * (((w-1/params['m']) / scaler) ** 2)))
     return reg
 
 
