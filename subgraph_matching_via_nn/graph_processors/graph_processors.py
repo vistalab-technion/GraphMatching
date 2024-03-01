@@ -6,6 +6,8 @@ import networkx as nx
 import numpy as np
 import scipy as sp
 
+from subgraph_matching_via_nn.graph_processors.binarization_algos import \
+    solve_maximum_weight_subgraph
 from subgraph_matching_via_nn.utils.graph_utils import laplacian, graph_edit_matrix
 from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
 
@@ -121,6 +123,13 @@ class GraphProcessor(BaseGraphProcessor):
 
                 # Binarize by keeping the largest m components
                 w_th = top_m(heat_w, params["m"])
+        elif type == 'mwksp':
+
+            A = (nx.adjacency_matrix(graph)).toarray()
+            selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, params[
+                "num_nodes"], params["num_edges"])
+            w_th = np.zeros([len(graph.nodes()), 1])
+            w_th[selected_nodes] = 1.0
 
         w_th = w_th / w_th.sum()
         w_th_dict = dict(zip(graph.nodes(), w_th))
