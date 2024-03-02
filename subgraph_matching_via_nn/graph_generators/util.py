@@ -42,6 +42,7 @@ def generate_wheel_graph(n):
 
     return G
 
+
 def generate_random_tree(n):
     G = nx.Graph()
     nodes = list(range(n))
@@ -54,6 +55,18 @@ def generate_random_tree(n):
     while nodes:
         target = random.choice(list(G.nodes()))
         G.add_edge(nodes.pop(), target)
+
+    return G
+
+
+def generate_graph_with_unique_degrees(n):
+    k = 1
+    degree_sequence = [k if i <= k else i for i in range(n)]
+    print(f'{degree_sequence=}')
+    G = nx.configuration_model(degree_sequence)
+    # Remove self-loops
+    G = nx.Graph(G)
+    G.remove_edges_from(nx.selfloop_edges(G))
 
     return G
 

@@ -169,11 +169,13 @@ def plot_graph_with_colors(G: nx.graph,
         nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8,
                                 font_color='blue', ax=ax)
 
-    ax.set_axis_off()  # Turn off the axis
-
     # Add colorbar
     if distribution is not None and colorbar:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
-    ax.set_title(title)
+
+
+    if ax is not None:
+        ax.set_axis_off()
+        ax.set_title(title)

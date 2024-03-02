@@ -2,7 +2,7 @@ import pulp
 from pulp import PULP_CBC_CMD
 
 
-def solve_maximum_weight_subgraph(weights, adjacency_matrix, k, l):
+def solve_maximum_weight_subgraph(weights, adjacency_matrix, requested_num_nodes, requested_num_edges):
     # Create a binary integer programming problem
     problem = pulp.LpProblem("Maximum_Weight_Subgraph", pulp.LpMaximize)
 
@@ -16,8 +16,8 @@ def solve_maximum_weight_subgraph(weights, adjacency_matrix, k, l):
     problem += pulp.lpSum(weights[i] * x[i] for i in range(num_nodes))
 
     # Constraints
-    problem += pulp.lpSum(x) == k  # Node selection constraint
-    problem += pulp.lpSum(y.values()) == l  # Edge selection constraint
+    problem += pulp.lpSum(x) == requested_num_nodes  # Node selection constraint
+    problem += pulp.lpSum(y.values()) == requested_num_edges  # Edge selection constraint
 
     # Connectivity constraints
     for i in range(num_nodes):

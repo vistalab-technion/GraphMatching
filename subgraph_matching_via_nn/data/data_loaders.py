@@ -1,13 +1,17 @@
 import pickle
-from logging import exception
+from logging import exception, error
 
 import numpy as np
 import networkx as nx
 
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
-    sample_connected_subgraph, generate_wheel_graph, generate_random_graph
+    sample_connected_subgraph, generate_wheel_graph, generate_random_graph, \
+    generate_graph_with_unique_degrees
 from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator, \
     get_edge_indicator
+
+GRAPH_TYPES = ['random', 'random_tree', 'wheel', 'unique_degree', 'example',
+               'subcircuit']
 
 
 def load_graph(type: str = 'random',
@@ -22,7 +26,7 @@ def load_graph(type: str = 'random',
               edge_indicator -
               edge indicator (i.e., dict[(i,j)]= 1 for edges of G_sub that are in G)
     """
-    if type == 'random':
+    if type in GRAPH_TYPES:
 
         graph_size = loader_params["graph_size"]
         subgraph_size = loader_params["subgraph_size"]
@@ -32,9 +36,16 @@ def load_graph(type: str = 'random',
         m = subgraph_size  # Number of nodes in the subgraph
 
         # TODO: add this to the choice, change to enum
-        G = generate_random_graph(n)
-        # G = generate_random_tree(n)
-        # G = generate_wheel_graph(n)
+        if type == 'random':
+            G = generate_random_graph(n)
+        elif type == 'random_tree':
+            G = generate_random_tree(n)
+        elif type == 'wheel':
+            G = generate_wheel_graph(n)
+        elif type == 'unique_degree':
+            G = generate_graph_with_unique_degrees(n)
+        else:
+            error('error, graph type not supported')
 
         # Generate a random subset of nodes for the subgraph
         # subgraph_nodes = np.random.choice(G.nodes(), size=m, replace=False)
@@ -63,7 +74,7 @@ def load_graph(type: str = 'random',
         node_indicator = get_node_indicator(G=G, G_sub=G_sub)
         edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
 
-    elif 'subcircuit':
+    elif type == 'subcircuit':
 
         def remove_isolated_nodes_from_graph(graph):
             isolated_nodes_indices = list(nx.isolates(graph))
