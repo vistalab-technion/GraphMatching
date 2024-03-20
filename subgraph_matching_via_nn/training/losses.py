@@ -16,9 +16,8 @@ def stable_inverse(x, epsilon):
     return 1 / (x + epsilon)
 
 
-def inv_sum_reciprocal(x, y, epsilon1=1e-6, epsilon2=0):
-    return stable_inverse(stable_inverse(x, epsilon1) +
-                          stable_inverse(y, epsilon1), epsilon2)
+def inv_sum_reciprocal(x, y, epsilon1=1e-6):
+    return stable_inverse(stable_inverse(x+y, epsilon1), 0)
 
 
 # need to compute gradient on all pairs

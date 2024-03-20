@@ -84,8 +84,8 @@ def top_m(w, m):
     return w_th
 
 
-def uniform_dist(n):
-    x = torch.ones(n, 1, dtype=TORCH_DTYPE)
+def uniform_dist(n, device='cpu'):
+    x = torch.ones(n, 1, dtype=TORCH_DTYPE, device=device)
     return x / x.sum()
 
 

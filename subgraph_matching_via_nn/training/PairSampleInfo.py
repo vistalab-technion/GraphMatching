@@ -1,23 +1,29 @@
-import networkx as nx
+from typing import Optional
 
+from subgraph_matching_via_nn.composite_nn.localization_state_replayer import ReplayableLocalizationState, \
+    LocalizationStateReplayer
 from subgraph_matching_via_nn.data.annotated_graph import AnnotatedGraph
-from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
 
 
 class PairSampleBase:
-    localization_object: object  # None if pair was generated without any optimization involved
+    localization_object: Optional[LocalizationStateReplayer]
+    # None if pair was generated without any optimization involved, or was not filled yet by trainer module
+
+    localization_state_object: Optional[ReplayableLocalizationState]
+    # None if pair was generated without any optimization involved
 
     def __init__(self,
                  masked_graph: AnnotatedGraph,
                  subgraph: AnnotatedGraph,
                  is_negative_sample: bool = None,
-                 localization_object: bool = None
+                 localization_state_object: ReplayableLocalizationState = None
                  ):
         super().__init__()
         self.masked_graph = masked_graph
         self.subgraph = subgraph
         self.is_negative_sample = is_negative_sample
-        self.localization_object = localization_object
+        self.localization_state_object = localization_state_object
+        self.localization_object = None
 
 
 class Pair_Sample_Info(PairSampleBase):

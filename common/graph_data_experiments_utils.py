@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from torch import optim
 from common.graph_utils import SubGraphGenerator
 from common.out_sources_distance import get_out_sources_max_distance
+from subgraph_matching_via_nn.composite_nn.composite_solver import BaseCompositeSolver
 from subgraph_matching_via_nn.data.data_loaders import load_graph
 from common.logger import TimeLogging
 from powerful_gnns.util import S2VGraph, load_data_given_graph_list_and_label_map
@@ -77,7 +78,9 @@ def create_graph_metric_net(model_factory_func, device, params):
 
     return graph_metric_nn, model
 
-def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_params, dump_base_path = f".{os.sep}runlogs", graph_metric_nn_checkpoint_path=None, build_trainer=True):
+def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_params,
+                                   dump_base_path = f".{os.sep}runlogs", graph_metric_nn_checkpoint_path=None,
+                                   build_trainer=True, composite_solver: BaseCompositeSolver = None):
 
     # must start on CPU to allow moving model to GPU, due to existing pytorch bug
     device = 'cpu'
@@ -99,7 +102,7 @@ def init_embedding_net_and_trainer(model_factory_func, solver_params, problem_pa
     trainer = None
     if build_trainer:
         trainer = S2VGraphEmbeddingSimilarityMetricTrainer(graph_metric_nn, dump_base_path,
-                                          problem_params, solver_params)
+                                          problem_params, solver_params, composite_solver)
 
     return trainer, graph_metric_nn, model
 

@@ -16,10 +16,12 @@ from matplotlib import pyplot as plt
 from torch.utils.data import WeightedRandomSampler
 from tqdm import tqdm
 from powerful_gnns.models.graphcnn import GraphCNN
+from subgraph_matching_via_nn.composite_nn.composite_solver import BaseCompositeSolver
+from subgraph_matching_via_nn.composite_nn.localization_state_replayer import ReplayableLocalizationState, \
+    LocalizationStateReplayer
 from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import BaseGraphMetricNetwork
 from subgraph_matching_via_nn.training.MarginLoss import MarginLoss
-from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
-from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
+from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info, PairSampleBase
 from subgraph_matching_via_nn.training.localization_grad_distance import LocalizationGradDistance
 from subgraph_matching_via_nn.training.losses import get_pairs_batch_aggregated_distance
 from subgraph_matching_via_nn.training.trainer.PairSampleInfo_with_S2VGraphs import PairSampleInfo_with_S2VGraphs
@@ -53,11 +55,19 @@ class SimilarityMetricTrainerBase(abc.ABC):
                                                device=device_id)
 
         gnn_model = self.graph_similarity_module.embedding_networks[0].gnn_model
+
         self.graph_similarity_module.to(device_id).requires_grad_(True)
         gnn_model.move_buffers_to_device()
 
     def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
+
+        # load graph_similarity_module from dump, due to process weights loading corruption bug
+        with open(self.graph_similarity_module_path, 'rb') as file:
+            self.graph_similarity_module = pickle.load(file)
+
+        self.graph_similarity_module.train()
+
         self.reset_modules_parameters(device_id)
 
         with open(train_loader_path, 'rb') as file:
@@ -84,8 +94,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
     def __init__(self, graph_similarity_module: BaseGraphMetricNetwork, dump_base_path: str,
-                 problem_params: Dict, solver_params: Dict):
+                 problem_params: Dict, solver_params: Dict, composite_solver: BaseCompositeSolver = None):
         self.graph_similarity_module = graph_similarity_module
+
+        self.composite_solver = composite_solver
         self.dump_base_path = dump_base_path
         self.problem_params = problem_params
         self.solver_params = solver_params
@@ -122,18 +134,28 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         self.threads = []
 
+        # dump model and save path
+        model_dump_base_path = f".{os.sep}models"
+        if not os.path.exists(model_dump_base_path):
+            os.makedirs(model_dump_base_path)
+        graph_similarity_module_path = os.path.join(model_dump_base_path, f"{str(time.time())}.p")
+        with open(graph_similarity_module_path, 'wb') as f:
+            pickle.dump(self.graph_similarity_module, f)
+        self.graph_similarity_module_path = graph_similarity_module_path
+
     def __model_dump(self, model_state_dict, path):
         torch.save(model_state_dict, path)
         print(f"model saved at {path}")
 
     def _save_model(self, model, dump_path, file_name='best_model_state_dict.pt'):
         model_state_dict = copy.deepcopy(model.state_dict())
+        output_file_path = os.path.join(dump_path, file_name)
         if dump_path is not None:
-            thread = Thread(target=self.__model_dump, args=(model_state_dict, os.path.join(dump_path, file_name)))
+            thread = Thread(target=self.__model_dump, args=(model_state_dict, output_file_path))
             self.threads.append(thread)
             thread.start()
 
-        return model_state_dict
+        return output_file_path
 
     def _save_model_stats(self, model, dump_path, all_train_losses, all_val_losses):
         if dump_path is not None:
@@ -247,8 +269,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
         Returns: all train losses list and all validation losses list
 
         """
-        self.graph_similarity_module.train()
-
         size = len(processes_device_ids)
         processes = []
         queues = []
@@ -290,15 +310,16 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         dump_path = self.__create_dump_dir(self.dump_base_path)
 
-        best_val_loss = self.monitoring_training(queues, dump_path)
+        best_val_loss, model_output_path = self.monitoring_training(queues, dump_path)
 
         for i, p in enumerate(processes):
             p.join()
             print(f"training worker process #{i} finished")
         print("finished monitoring training")
-        return best_val_loss
+        return best_val_loss, model_output_path
 
     def monitoring_training(self, queues, dump_path=None):
+        model_output_path = None
         all_train_losses = []
         all_val_losses = []
         successive_convergence_epoch_ctr = 0
@@ -316,7 +337,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
             monitoring_update_lists = []
 
             for q in queues:
-                last_monitoring_update_list = q.get()
+                last_monitoring_update_list, received_model_output_path = q.get()
+                if received_model_output_path is not None:
+                    model_output_path = received_model_output_path
 
                 if last_monitoring_update_list == SimilarityMetricTrainerBase.SENTINEL:
                     print(f"Monitoring process is exiting, epochs={epoch_ctr}")
@@ -360,7 +383,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                         successive_convergence_epoch_ctr += 1
                         if successive_convergence_epoch_ctr > self.cycle_patience * (
                                 self.step_size_up + self.step_size_down):
-                            return best_val_loss
+                            return best_val_loss, model_output_path
                     else:
                         # found better val loss
                         successive_convergence_epoch_ctr = 0
@@ -369,20 +392,20 @@ class SimilarityMetricTrainerBase(abc.ABC):
                     if epoch_train_loss <= self.train_loss_convergence_threshold:
                         train_loss_successive_convergence_counter += 1
                         if train_loss_successive_convergence_counter >= self.successive_convergence_min_iterations_amount:
-                            return best_val_loss
+                            return best_val_loss, model_output_path
                     else:
                         train_loss_successive_convergence_counter = 0
 
-        return best_val_loss
+        return best_val_loss, model_output_path
 
-    def __terminate_worker_process(self, q):
+    def __terminate_worker_process(self, q, model_output_path: str):
         if dist.is_initialized():
             rank = dist.get_rank()
         else:
             rank = 0
         print(f"worker process {rank} is terminating at {time.strftime('%H:%M:%S', time.localtime())}")
         sys.stdout.flush()
-        q.put(SimilarityMetricTrainerBase.SENTINEL)
+        q.put((SimilarityMetricTrainerBase.SENTINEL, model_output_path))
 
         for thread in self.threads:
             thread.join()
@@ -393,12 +416,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 graph.to(device=self.device, non_blocking=True)
 
     def __model_save_while_training(self, model, rank, epoch_ctr=None):
+        model_output_path = None
         model_checkpoint_epochs_pace = self.solver_params['model_checkpoint_epochs_pace']
         if rank == 0:
             if (epoch_ctr is None) or (epoch_ctr % model_checkpoint_epochs_pace == 0):
                 dump_path = self.__create_dump_dir(f".{os.sep}mp")
 
-                _ = self._save_model(model, dump_path)
+                model_output_path = self._save_model(model, dump_path)
+        return model_output_path
 
     # Training loop, works on the graph pairs data loaders and the similarity model
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
@@ -414,7 +439,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         # define optimizer and scheduler
         if not self.init_optimizer(model):
-            self.__terminate_worker_process(q)
+            self.__terminate_worker_process(q, None)
             return
 
         # init loop state
@@ -445,7 +470,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                 # optimization step
                 self.optimization_step(model, train_loss)
 
-            print('Rank ', rank, ', epoch ', epoch_ctr)
+            print('Rank ', rank, ', epoch ', epoch_ctr, 'epoch train loss ' , epoch_train_loss)
             #      , ': ', epoch_train_loss / num_batches)
             sys.stdout.flush()
 
@@ -458,21 +483,21 @@ class SimilarityMetricTrainerBase(abc.ABC):
                                                              is_train=False)
                     epoch_val_loss += val_loss.item()
 
+            model_output_path = self.__model_save_while_training(model, rank, epoch_ctr)
+
             # avoid deadlock when there are multiple processes -> make sure all processes finish together epoch wise
             monitoring_update_list.append((epoch_train_loss, epoch_val_loss))
             if epoch_ctr % monitoring_update_epochs_pace == 0:
-                q.put(monitoring_update_list)
+                q.put((monitoring_update_list, model_output_path))
                 monitoring_update_list = []
 
-            self.__model_save_while_training(model, rank, epoch_ctr)
-
         if len(monitoring_update_list) != 0:
-            q.put(monitoring_update_list)
+            q.put((monitoring_update_list, model_output_path))
 
         print("rank", rank, ", epochs trained: ", epoch_ctr)
 
-        self.__model_save_while_training(model, rank)
-        self.__terminate_worker_process(q)
+        model_output_path = self.__model_save_while_training(model, rank)
+        self.__terminate_worker_process(q, model_output_path)
 
     def create_data_sampler(self, train_set, new_examples_set_size):
         n = len(train_set)
@@ -490,22 +515,29 @@ class SimilarityMetricTrainerBase(abc.ABC):
                                      replacement=True), train_set_with_sampler_labels
 
     def get_grad_distance(self, pair_sample_info: PairSampleBase,
-                          localization_object: object):
-        if localization_object is not None:
+                          localization_state_object: ReplayableLocalizationState):
+        localization_state_replayer = None
+        if localization_state_object is not None:
             #TODO: Avoid memory sync between cpu to CUDA, if possible [remove .to(self.device)]
-            pair_sample_info.localization_object = localization_object.to(self.device)
+            pair_sample_info.localization_state_object = localization_state_object.to(self.device)
+
+            # try to save creation time ot replayer for consecutive calls to this fuction
+            localization_state_replayer = pair_sample_info.localization_object
+            if localization_state_replayer is None:
+                localization_state_replayer = \
+                    LocalizationStateReplayer(self.composite_solver, pair_sample_info.localization_state_object)
 
         # this part takes relatively a long time
         # (we can probably optimize it way if we save it when the example is first generated)
         grad_distance = self.inference_grad_distance.compute_grad_distance(
-            pair_sample_info)
+            localization_state_replayer, [self.graph_similarity_module.embedding_networks[i] for i in range(len(self.graph_similarity_module.embedding_networks))])
         return grad_distance
 
     def get_aggregated_pairs_batch_distance(self, emb_distances, batch: Tuple[
         Pair_Sample_Info, List[Pair_Sample_Info]]):
         _, samples = batch
-        grad_distances = [self.stub_grad_distance if pair.localization_object is None
-                          else self.get_grad_distance(pair, pair.localization_object)
+        grad_distances = [self.stub_grad_distance if pair.localization_state_object is None
+                          else self.get_grad_distance(pair, pair.localization_state_object)
                           for pair in samples]
 
         is_negative_sample_flags = [pair.is_negative_sample for pair in samples]

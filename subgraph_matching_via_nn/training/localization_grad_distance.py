@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, List
 import torch
 
-from subgraph_matching_via_nn.training.PairSampleBase import PairSampleBase
+from subgraph_matching_via_nn.composite_nn.localization_state_replayer import LocalizationStateReplayer
+from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import BaseGraphEmbeddingNetwork
 from subgraph_matching_via_nn.training.grad_distance import get_grad_distance
 
 
@@ -11,15 +12,9 @@ class LocalizationGradDistance:
         self.problem_params = problem_params
         self.solver_params = solver_params
 
-    def compute_grad_distance(self, pair_sample_info: PairSampleBase):
-        g1 = pair_sample_info.graph
-        g2 = pair_sample_info.subgraph
-
-        loss_instance = pair_sample_info.localization_object
-        if (loss_instance is None) or (len(loss_instance.get_params_list()) == 0):
+    def compute_grad_distance(self, localization_state_replayer: LocalizationStateReplayer,
+                              embedding_networks: List[BaseGraphEmbeddingNetwork]):
+        if (localization_state_replayer is None) or (len(localization_state_replayer.get_params_list(embedding_networks)) == 0):
             return float("Inf") * torch.ones(size=(1,), device=self.solver_params["device"], requires_grad=False)
 
-        # graph1, graph2 needed for API, but not really used when calculating grad distance
-        alignment_loss_fn = lambda graph1, graph2: pair_sample_info.localization_object
-
-        return get_grad_distance([g1], [g2], alignment_loss_fn)
+        return get_grad_distance([localization_state_replayer], embedding_networks)

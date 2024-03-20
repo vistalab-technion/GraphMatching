@@ -42,9 +42,13 @@ class CompositeNeuralNetwork(nn.Module):
 
         return embeddings, w
 
-    def embed(self, A, w, params: dict = None, is_use_last_args: bool = False):
+    def embed(self, A, w, params: dict = None, is_use_last_args: bool = False,
+              embedding_networks: List[BaseGraphEmbeddingNetwork] = None):
+        if embedding_networks is None:
+            embedding_networks = self.embedding_networks
+
         embeddings = []
-        for embedding_network in self.embedding_networks:
+        for embedding_network in embedding_networks:
             embeddings.append(embedding_network(A=A, w=w, params=params, is_use_last_args=is_use_last_args))
             # TODO: apply mlp. for example
             #  ||a(emb1-emb1_gt)||^2+||b(emb2-emb2_gt)||^2  s.t. (a^2+b^2)=1

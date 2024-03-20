@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Tuple, List
 import networkx as nx
 import numpy as np
@@ -6,21 +7,95 @@ from torch import optim, nn
 from livelossplot import PlotLosses
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import BaseGraphEmbeddingNetwork
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import BaseGraphProcessor, GraphProcessor
 from subgraph_matching_via_nn.mask_binarization.indicator_dsitribution_binarizer import IndicatorDistributionBinarizer
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE, uniform_dist
 
 
-class BaseCompositeSolver(nn.Module):
-
+class PickleSupportedCompositeSolver(nn.Module):
     def __init__(self, composite_nn: CompositeNeuralNetwork, embedding_metric_nn: EmbeddingMetricNetwork,
-                 graph_processor: Optional[BaseGraphProcessor] = GraphProcessor(), params: dict = {}):
+                 graph_processor: Optional[BaseGraphProcessor], params: dict):
         super().__init__()
         self.composite_nn = composite_nn
         self.embedding_metric_nn = embedding_metric_nn
         self.graph_processor = graph_processor
         self.params = params
+
+        #TODO: copy params and set lambda functions entries to None
+
+    def _get_reg_loss(self, A_full_processed, w):
+        reg_terms_list = [reg_param * reg_term(A_full_processed, w, self.params) for reg_param, reg_term in
+                          zip(self.params["reg_params"], self.params["reg_terms"])]
+
+        if len(reg_terms_list) == 0:
+            return 0
+        return torch.stack(reg_terms_list).sum()
+
+    def get_composite_loss_terms(self, A, embeddings_sub, is_use_last_args=False):
+        x0 = self.params.get("x0", None)
+        embeddings_full, w = self.composite_nn(A, x0, self.params, is_use_last_args=is_use_last_args)
+
+        loss, reg = self.__get_loss_given_embeddings_and_adj_matrix(embeddings_full, embeddings_sub, A, w)
+        return loss, reg, w
+
+    def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
+        # preprocess the graphs, e.g. to get a line-graph
+        G = self.graph_processor.pre_process(SubGraph(G))
+        G_sub = self.graph_processor.pre_process(SubGraph(G_sub))
+        sub_graph = SubGraph(G, G_sub)
+        A = sub_graph.A_full
+        A_sub = sub_graph.A_sub
+
+        return A, A_sub, G, G_sub
+
+    def _embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
+        A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
+        device = self.params['device']
+        A = A.to(device=device)
+        A_sub = A_sub.to(device=device)
+
+        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
+                                                 w=uniform_dist(A_sub.shape[0]).detach().to(
+                                                     device=self.params['device']))
+
+        return A, A_sub, G, G_sub, embeddings_sub
+
+    def __get_loss_given_embeddings_and_adj_matrix(self, embeddings_full, embeddings_sub, A, w):
+        loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
+                                        embeddings_subgraph=embeddings_sub)
+
+        reg = self._get_reg_loss(A, w)
+        return loss, reg
+
+    # for calculating the grad of the loss grad with respect to the embedding params
+    def solve_using_external_params(self, w: torch.Tensor, A: torch.Tensor, A_sub: torch.Tensor,
+                       embedding_networks: List[BaseGraphEmbeddingNetwork], dtype=TORCH_DTYPE):
+        device = self.params['device']
+        A_sub = A_sub.type(dtype).to(device=device)
+        A = A.type(dtype).to(device=device)
+
+        # compute reference embedding
+        embeddings_sub = self.composite_nn.embed(A=A_sub,
+                                                 w=uniform_dist(A_sub.shape[0], device=device).detach(),
+                                                 embedding_networks=embedding_networks)
+
+        # compute w based embedding
+        embeddings_full = self.composite_nn.embed(A=A, w=w, is_use_last_args=False,
+                                                  embedding_networks=embedding_networks)
+
+        loss, reg = self.__get_loss_given_embeddings_and_adj_matrix(embeddings_full, embeddings_sub, A, w)
+        full_loss = loss + reg
+
+        return full_loss
+
+
+class BaseCompositeSolver(PickleSupportedCompositeSolver):
+
+    def __init__(self, composite_nn: CompositeNeuralNetwork, embedding_metric_nn: EmbeddingMetricNetwork,
+                 graph_processor: Optional[BaseGraphProcessor] = GraphProcessor(), params: dict = {}):
+        super(BaseCompositeSolver, self).__init__(composite_nn, embedding_metric_nn, graph_processor, params)
 
         self.liveloss = PlotLosses(mode='notebook')
 
@@ -93,33 +168,34 @@ class BaseCompositeSolver(nn.Module):
 
         return loss, ref_loss
 
-    def _get_reg_loss(self, A_full_processed, w):
-        reg_terms_list = [reg_param * reg_term(A_full_processed, w, self.params) for reg_param, reg_term in
-                           zip(self.params["reg_params"], self.params["reg_terms"])]
-
-        if len(reg_terms_list) == 0:
-            return 0
-        return torch.stack(reg_terms_list).sum()
-
-    def get_composite_loss_terms(self, A, embeddings_sub, is_use_last_args=False):
-        x0 = self.params.get("x0", None)
-        embeddings_full, w = self.composite_nn(A, x0, self.params, is_use_last_args=is_use_last_args)
-
-        loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
-                                        embeddings_subgraph=embeddings_sub)
-
-        reg = self._get_reg_loss(A, w)
-        return loss, reg, w
-
     def __log_loss(self, iteration, loss, reg, w):
         if iteration % self.params['k_update_plot'] == 0:
             full_loss = loss + reg
+
+            model_params = list(self.composite_nn.parameters())
+            params_grads =                     torch.cat(
+                        [elem.grad.reshape(-1) for elem in model_params if elem is not None]
+                    )
+            max_grad = torch.max(torch.abs(params_grads))
+
+            grad_norm = torch.stack([
+                torch.norm(
+                    params_grads
+                )
+            ]).reshape(-1)
+
             self.liveloss.update({'data term': loss.item(), 'reg': reg.item(), 'full_loss': full_loss.item()})
             self.liveloss.send()
-            print(f"Iteration {iteration}, Loss: {loss.item()}")
-            print(f"Iteration {iteration}, Reg: {reg.item()}")
-            print(f"Iteration {iteration}, Loss + rho * Reg: {full_loss.item()}")
-            print(f"Iteration {iteration}, w: {w}")
+            print(
+                f"Iteration {iteration},"
+                  f" {os.linesep}Loss: {loss.item()}"
+                  f"{os.linesep}Reg: {reg.item()}"
+                  f"{os.linesep}Loss + rho * Reg: {full_loss.item()}"
+                  f"{os.linesep}grad norm: {grad_norm}"
+                  f"{os.linesep}max grad element: {max_grad}"
+                  f"{os.linesep}w: {w}"
+            )
+
 
     def _create_optimizer(self):
         lr = self.params['lr']
@@ -141,16 +217,6 @@ class BaseCompositeSolver(nn.Module):
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
         return optimizer
 
-    def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
-        # preprocess the graphs, e.g. to get a line-graph
-        G = self.graph_processor.pre_process(SubGraph(G))
-        G_sub = self.graph_processor.pre_process(SubGraph(G_sub))
-        sub_graph = SubGraph(G, G_sub)
-        A = sub_graph.A_full
-        A_sub = sub_graph.A_sub
-
-        return A, A_sub, G, G_sub
-
     def forward(self, input_graphs):
         """
         input_graphs (List[Tuple[nx.graph, nx.graph]])
@@ -162,24 +228,13 @@ class BaseCompositeSolver(nn.Module):
             graphs_distances_list.append(graphs_distance)
         return torch.stack(graphs_distances_list).unsqueeze(1)
 
-    def __embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
-        A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
-        device = self.params['device']
-        A = A.to(device=device)
-        A_sub = A_sub.to(device=device)
-
-        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
-                                                 w=uniform_dist(A_sub.shape[0]).detach().to(device=self.params['device']))
-
-        return A, A_sub, G, G_sub, embeddings_sub
-
-    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
-        A, A_sub, G, G_sub, embeddings_sub = self.__embedding_sub(G, G_sub, dtype)
+    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
+        A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
         loss, reg, _ = self.get_composite_loss_terms(A, embeddings_sub)
         return loss + reg
 
-    def solve(self, G: nx.graph, G_sub: nx.graph, dtype=torch.double):
-        A, A_sub, G, G_sub, embeddings_sub = self.__embedding_sub(G, G_sub, dtype)
+    def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
+        A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
 
         self.composite_nn.train() # Set the model to training mode
         optimizer = self._create_optimizer()

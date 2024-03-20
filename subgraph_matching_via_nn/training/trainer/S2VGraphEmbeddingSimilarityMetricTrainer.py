@@ -1,9 +1,10 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import copy
 import torch
 import torch_geometric as tg
 
 from powerful_gnns.util import S2VGraph, load_data_given_graph_list_and_label_map
+from subgraph_matching_via_nn.composite_nn.composite_solver import BaseCompositeSolver
 from subgraph_matching_via_nn.data.annotated_graph import AnnotatedGraph
 from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import BaseGraphMetricNetwork
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
@@ -12,10 +13,10 @@ from subgraph_matching_via_nn.training.trainer.SimilarityMetricTrainerBase impor
 
 
 class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
-    def __init__(self, graph_similarity_module: BaseGraphMetricNetwork, dump_base_path: str,
-                 problem_params: Dict, solver_params: Dict):
-        super(S2VGraphEmbeddingSimilarityMetricTrainer, self).__init__(graph_similarity_module, dump_base_path,
-                                                      problem_params, solver_params)
+    def __init__(self, graph_similarity_module_factory, dump_base_path: str,
+                 problem_params: Dict, solver_params: Dict, composite_solver: BaseCompositeSolver = None):
+        super(S2VGraphEmbeddingSimilarityMetricTrainer, self).__init__(graph_similarity_module_factory, dump_base_path,
+                                                      problem_params, solver_params, composite_solver)
         self.annotated_graph_to_converted_s2v_graph_map = {}
 
     @staticmethod
