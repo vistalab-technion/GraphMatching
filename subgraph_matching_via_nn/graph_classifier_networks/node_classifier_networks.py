@@ -92,6 +92,18 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         self.fc_out = nn.Linear(hidden_dim, output_dim,
                                 dtype=TORCH_DTYPE)  # Third Fully-Connected Layer with output size output_dim
 
+    def init_params(self, default_weights=None):
+        print("ignoring default_weights")
+        with torch.no_grad():
+            self.fc_in.reset_parameters()
+            self.fc_out.reset_parameters()
+
+            for layer in self.mid_layers.children():
+                if hasattr(layer, 'reset_parameters'):
+                    layer.reset_parameters()
+
+            self.classification_layer.init_weights()
+
     def forward(self, A, x=None, params: dict = None):
         if x is None:
             x = self.x_stub
