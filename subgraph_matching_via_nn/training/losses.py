@@ -55,8 +55,8 @@ def combine_grad_with_euclidean_distances(grad_distances, euclidean_distances, t
     euclidean_distances = euclidean_distances.reshape(-1)
     grad_distances = grad_distances.reshape(-1)
 
-    euclidean_distances = torch.nan_to_num(euclidean_distances, nan=float("Inf"))
-    grad_distances = torch.nan_to_num(grad_distances, nan=float("Inf"))
+    euclidean_distances = torch.nan_to_num(euclidean_distances, nan=float(0))
+    grad_distances = torch.nan_to_num(grad_distances, nan=float(0))
 
     total_distance_sqr = inv_sum_reciprocal(grad_distances, euclidean_distances, epsilon1=tol / 100)
     return total_distance_sqr
