@@ -173,9 +173,9 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
             full_loss = loss + reg
 
             model_params = list(self.composite_nn.parameters())
-            params_grads =                     torch.cat(
-                        [elem.grad.reshape(-1) for elem in model_params if elem is not None]
-                    )
+            params_grads = torch.cat(
+                [elem.grad.reshape(-1) for elem in model_params if ((elem is not None) and (elem.grad is not None))]
+            )
             max_grad = torch.max(torch.abs(params_grads))
 
             grad_norm = torch.stack([
