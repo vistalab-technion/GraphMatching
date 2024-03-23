@@ -19,6 +19,7 @@ from powerful_gnns.util import S2VGraph, load_data_given_graph_list_and_label_ma
 from powerful_gnns.models.graphcnn import GraphCNN
 from common.EmbeddingCalculationsService import pairwise_l2_distance, show_distance_matrix, \
     calculate_energy_based_hidden_rep
+from subgraph_matching_via_nn.graph_processors.graph_processors import GraphProcessor
 from subgraph_matching_via_nn.training.PairSampleInfo import Pair_Sample_Info
 from subgraph_matching_via_nn.data.annotated_graph import AnnotatedGraph
 from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import MLPGraphMetricNetwork
@@ -442,7 +443,7 @@ def remove_isolated_nodes_from_graph(graph:nx.Graph):
     isolated_nodes_indices = list(nx.isolates(graph))
     graph.remove_nodes_from(isolated_nodes_indices)
 
-def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel):
+def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel, to_line:bool):
     g_file_rel_path = 'full_graph.p'
     g_sub_file_rel_path = 'subgraph0.p'
 
@@ -455,6 +456,10 @@ def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_paral
     sub_graph = \
         load_graph(type='subcircuit',
                    loader_params=loader_params)
+
+    graph_processor = GraphProcessor(params={'to_line': to_line})  # , 'to_undirected': 'symmetrize'})
+    processed_sub_graph = graph_processor.pre_process(sub_graph)
+    sub_graph = processed_sub_graph
 
     G_sub = sub_graph.G_sub
     k = len(G_sub)
@@ -543,11 +548,11 @@ def generate_pairs_data_set_based_on_graphs(k_subgraph_annotated_graphs, output_
     _ = TimeLogging.log_time(curr_time, "finished generate_pairs_data_set_based_on_graphs")
 
 
-def generate_pairs_data_set(circuit_base_dir, circuit_file_name, output_folder_base_path = "brute_force_pairs"):
+def generate_pairs_data_set(circuit_base_dir, circuit_file_name, to_line: bool, output_folder_base_path = "brute_force_pairs"):
 
     curr_time = TimeLogging.log_time(None, "enter generate_pairs_data_set")
 
-    k_subgraph_annotated_graphs, k_subgraphs, G_perturbed, G_sub = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True)
+    k_subgraph_annotated_graphs, k_subgraphs, G_perturbed, G_sub = create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel=True, to_line=to_line)
 
     generate_pairs_data_set_based_on_graphs(k_subgraph_annotated_graphs, output_folder_base_path)
 
