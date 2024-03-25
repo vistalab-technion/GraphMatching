@@ -14,6 +14,10 @@ class ReplayableLocalizationState(nn.Module):
         self.sub_graph = sub_graph
         self.w = w
 
+    def set_device(self, device):
+        self.sub_graph.set_device(device)
+        self.w = self.w.to(device=device)
+
 
 class LocalizationStateReplayer:
     def __init__(self, composite_solver: PickleSupportedCompositeSolver, state: ReplayableLocalizationState):
