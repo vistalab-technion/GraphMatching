@@ -67,6 +67,8 @@ def partition_dataset(dataset, batch_size, rank=None, size=None):
 
 def average_gradients(model):
     size = float(dist.get_world_size())
+    if size == 1:
+        return
     for i, param in enumerate(model.parameters()):
         try:
             dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
