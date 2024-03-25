@@ -200,30 +200,36 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
         return True
 
-    def __create_data_loaders_lists(self, full_data_set, collate_func, device_ids):
+    def __create_data_loaders_lists(self, full_data_set, collate_func, device_ids, new_samples_amount=0):
         n_partitions = len(device_ids)
         num_workers = 0  # self.solver_params['num_workers']
         data_loaders = []
+        base_samples_amount = len(full_data_set)-new_samples_amount
 
-        datasets, bsz = split_dataset(full_data_set, self.batch_size, n_partitions)
+        base_datasets, bsz = split_dataset(full_data_set[: base_samples_amount], self.batch_size, n_partitions)
+        new_datasets, _ = split_dataset(full_data_set[base_samples_amount: ], self.batch_size, n_partitions)
+
+        datasets = [base_ds + new_ds for base_ds, new_ds in zip(base_datasets, new_datasets)]
+
+        # datasets, bsz = split_dataset(full_data_set, self.batch_size, n_partitions)
+
         for dataset in datasets:
-            loader = tg.loader.DataLoader(dataset, batch_size=bsz, shuffle=True, num_workers=num_workers)
+            data_sampler = self.create_data_sampler(
+                dataset, new_samples_amount)
+
+            loader = tg.loader.DataLoader(dataset,
+                                        batch_size=self.batch_size, sampler=data_sampler, num_workers=num_workers)
+
+            # loader = tg.loader.DataLoader(dataset, batch_size=bsz, shuffle=True, num_workers=num_workers)
             loader.collate_fn = collate_func
             data_loaders.append(loader)
 
         return data_loaders
 
-    def _build_data_loaders(self, train_set, validation_set, collate_func, device_ids):
-        # TODO: this code is for supporting new samples, but it messes up overfitting a small dataset (loss is unstable)
-        # data_sampler, train_set_with_sampler_labels = self.create_data_sampler(
-        #     train_set, new_samples_amount)
-        #
-        # train_loader = tg.data.DataLoader(train_set_with_sampler_labels,
-        #                                   batch_size=self.batch_size, sampler=data_sampler)
-
+    def _build_data_loaders(self, train_set, validation_set, collate_func, device_ids, new_samples_amount):
         n_partitions = len(device_ids)
 
-        train_data_loaders = self.__create_data_loaders_lists(train_set, collate_func, device_ids)
+        train_data_loaders = self.__create_data_loaders_lists(train_set, collate_func, device_ids, new_samples_amount)
         if len(validation_set) != 0:
             val_data_loaders = self.__create_data_loaders_lists(validation_set, collate_func, device_ids)
         else:
@@ -509,10 +515,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
         w_new_label = p_new_label / (1 - p_new_label)
 
         weights = [1 if i < b else w_new_label for i, item in enumerate(train_set)]
-        train_set_with_sampler_labels = [(item, 0) if i < b else (item, 1) for i, item
-                                         in enumerate(train_set)]
+        # train_set_with_sampler_labels = [(item, 0) if i < b else (item, 1) for i, item
+        #                                  in enumerate(train_set)]
         return WeightedRandomSampler(weights=weights, num_samples=n,
-                                     replacement=True), train_set_with_sampler_labels
+                                     replacement=True)
 
     def get_grad_distance(self, pair_sample_info: PairSampleBase,
                           localization_state_object: ReplayableLocalizationState):

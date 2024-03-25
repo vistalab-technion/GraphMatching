@@ -17,11 +17,11 @@ class SimilarityMetricTrainer(SimilarityMetricTrainerBase):
 
 
     def get_data_loaders(self, train_set: List[Pair_Sample_Info],
-                         val_set: List[Pair_Sample_Info], new_samples_amount) \
+                         val_set: List[Pair_Sample_Info], new_samples_amount, device_ids) \
             -> (tg.data.DataLoader, tg.data.DataLoader):
 
         train_loader, val_loader = self._build_data_loaders(train_set, val_set,
-                                                            SimilarityMetricTrainer.custom_collate)
+                                                            SimilarityMetricTrainer.custom_collate, device_ids, new_samples_amount)
 
         return train_loader, val_loader
 

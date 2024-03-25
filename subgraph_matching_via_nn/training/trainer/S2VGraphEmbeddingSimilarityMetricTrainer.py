@@ -62,7 +62,7 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
 
         train_loaders, val_loaders = self._build_data_loaders(combined_types_train_set, combined_types_val_set,
                                                             S2VGraphEmbeddingSimilarityMetricTrainer.custom_collate,
-                                                            device_ids)
+                                                            device_ids, new_samples_amount)
 
         self.annotated_graph_to_converted_s2v_graph_map = {}
 
