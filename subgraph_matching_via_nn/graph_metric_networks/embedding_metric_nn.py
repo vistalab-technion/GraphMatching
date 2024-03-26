@@ -31,7 +31,7 @@ class EmbeddingMetricNetwork(BaseEmbeddingMetricNetwork):
         :return: loss between embeddings
         """
 
-        scaler = self.params['scaler']
+        scaler = 1 #self.params['scaler']
 
         if isinstance(embeddings_full, list):
             losses = [self._loss_fun(embedding_full / scaler, embedding_subgraph / scaler)
