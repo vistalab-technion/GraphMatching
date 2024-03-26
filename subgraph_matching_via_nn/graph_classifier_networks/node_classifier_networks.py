@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List
 
 import numpy as np
 import torch
@@ -155,6 +156,21 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         return x.double()
 
+
+class SequentialNodeClassifierNetwork(BaseNodeClassifierNetwork):
+    def __init__(self, networks: List[BaseNodeClassifierNetwork]):
+        super(SequentialNodeClassifierNetwork, self).__init__(classification_layer=None, device=None)
+        self.networks = networks
+
+    def init_params(self, default_weights=None):
+        for network in self.networks:
+            network.init_params(default_weights=default_weights)
+
+    def forward(self, A, x=None, params: dict = None):
+        prev_network_output = x
+        for network in self.networks:
+            prev_network_output = network.forward(A=A, x=prev_network_output, params=params)
+        return prev_network_output
 
 class GoogleSoftmaxNodeClassifierNetwork(BaseNodeClassifierNetwork):
     EPSILON = torch.Tensor([np.finfo(float).tiny])
