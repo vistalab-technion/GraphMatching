@@ -244,6 +244,9 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                 is_use_last_args = (iteration > 0)
 
                 loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
+
+                loss = loss * self.params['scaler']
+
                 full_loss = loss + reg
 
                 optimizer.zero_grad()
