@@ -172,30 +172,43 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         if iteration % self.params['k_update_plot'] == 0:
             full_loss = loss + reg
 
-            model_params = list(self.composite_nn.parameters())
-            params_grads = torch.cat(
-                [elem.grad.reshape(-1) for elem in model_params if ((elem is not None) and (elem.grad is not None))]
-            )
-            max_grad = torch.max(torch.abs(params_grads))
+            # model_params = list(self.composite_nn.parameters())
+            # params_grads = torch.cat(
+            #     [elem.grad.reshape(-1) for elem in model_params if ((elem is not None) and (elem.grad is not None))]
+            # )
+            # max_grad = torch.max(torch.abs(params_grads))
 
-            grad_norm = torch.stack([
-                torch.norm(
-                    params_grads
-                )
-            ]).reshape(-1)
+            # grad_norm = torch.stack([
+            #     torch.norm(
+            #         params_grads
+            #     )
+            # ]).reshape(-1)
 
-            self.liveloss.update({'data term': loss.item(), 'reg': reg.item(), 'full_loss': full_loss.item()})
+            # param_grad_stats_str = ""
+            # for param in list(self.parameters()):
+            #     if param.grad is None:
+            #         continue
+            #
+            #     param_grads_list = [elem.reshape(-1) for elem in param.grad]
+            #     if len(param_grads_list) == 0:
+            #         continue
+            #     param_grads = torch.cat(
+            #         param_grads_list
+            #     )
+            #     param_grad_stats_str = f"{param_grad_stats_str}{os.linesep}: {(param_grads == 0).sum()}/{param_grads.shape[0]}"
+
+            self.liveloss.update({'DATA term': loss.item(), 'REG term': reg.item(), 'full loss': full_loss.item()})
             self.liveloss.send()
             print(
                 f"Iteration {iteration},"
-                  f" {os.linesep}Loss: {loss.item()}"
+                  f"{os.linesep}Data term: {loss.item()}"
                   f"{os.linesep}Reg: {reg.item()}"
-                  f"{os.linesep}Loss + rho * Reg: {full_loss.item()}"
-                  f"{os.linesep}grad norm: {grad_norm}"
-                  f"{os.linesep}max grad element: {max_grad}"
-                  f"{os.linesep}w: {w}"
+                  f"{os.linesep}Loss + Reg: {full_loss.item()}"
             )
-
+            # f"{os.linesep}#0 grad entries: {param_grad_stats_str}"
+            # f"{os.linesep}max grad element: {max_grad}"
+            # f"{os.linesep}w: {w}"
+            # f"{os.linesep}#0 grad entries: {(params_grads == 0).sum()}/{params_grads.shape[0]}"
 
     def _create_optimizer(self):
         lr = self.params['lr']
