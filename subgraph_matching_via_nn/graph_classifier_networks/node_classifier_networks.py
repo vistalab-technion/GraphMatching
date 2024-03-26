@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 from torch_geometric.nn import GCNConv
 import torch_geometric.utils as utils
 from torch_geometric.utils import from_scipy_sparse_matrix
@@ -20,6 +22,7 @@ class BaseNodeClassifierNetwork(nn.Module):
         super().__init__()
         self.classification_layer = classification_layer
         self.device = device
+        self.input_dim = input_dim
 
     def train_node_classifier(self,
                               G_sub: nx.graph = None,
@@ -74,8 +77,6 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
                  classification_layer, device):
         super().__init__(classification_layer=classification_layer,
                          input_dim=input_dim, device=device)
-
-        self.input_dim = input_dim
         if input_dim is not None:
             self.register_buffer('x_stub',
                                  torch.ones(1, input_dim, dtype=TORCH_DTYPE, device=self.device))
@@ -151,6 +152,87 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         x = self.conv2(x, edge_index)
         x = x + skip_x
         x = self.classification_layer(A, x)
+
+        return x.double()
+
+
+class GoogleSoftmaxNodeClassifierNetwork(BaseNodeClassifierNetwork):
+    EPSILON = torch.Tensor([np.finfo(float).tiny])
+
+    def __init__(self, n_nodes, n_out,
+                 classification_layer, device):
+        super(GoogleSoftmaxNodeClassifierNetwork, self).__init__(
+            classification_layer=classification_layer,
+            input_dim=n_nodes, device=device)
+
+        self.n_out = n_out
+
+        self.rx = None
+        self.rx_sqrt_sigma = None
+        self.rx_diag_sigma = None
+        self.raw_weights = None
+
+        self.init_params()
+
+
+    def init_params(self, default_weights=None):
+        n = self.input_dim
+        self.rx = torch.rand(n, device=self.device, dtype=TORCH_DTYPE)
+        self.rx_sqrt_sigma = Parameter(torch.eye(n, device=self.device, dtype=TORCH_DTYPE))
+        self.rx_diag_sigma = Parameter(torch.ones(n, device=self.device, dtype=TORCH_DTYPE))\
+            .to(dtype=TORCH_DTYPE)
+
+        weights_tensor = torch.rand((self.input_dim, 1), dtype=TORCH_DTYPE, device=self.device)
+        self.raw_weights = nn.Parameter(weights_tensor)
+
+    @staticmethod
+    def hard_topk(w, k):
+        top_ind = torch.topk(w, k, dim=0).indices
+        khot = torch.zeros_like(w, device=w.device, dtype=TORCH_DTYPE)
+        khot[top_ind] = 1.
+        return khot
+
+    @staticmethod
+    def soft_topk(w, k, t, separate=False):
+        khot_list = []
+        onehot_approx = torch.zeros_like(w, device=w.device, dtype=TORCH_DTYPE)
+        for i in range(k):
+            khot_mask = torch.maximum(1.0 - onehot_approx, GoogleSoftmaxNodeClassifierNetwork.EPSILON.type_as(w))
+            w = w + torch.log(khot_mask)
+            onehot_approx = torch.softmax(w / t, dim=0)
+            khot_list.append(onehot_approx)
+        if separate:
+            return khot_list
+        else:
+            return torch.sum(torch.stack(khot_list), dim=0)
+
+    @staticmethod
+    def sample_subset_multiGS(raw_weights, mu, sqrt_sigma, diag_sigma, k, t=0.1):
+        # sqrt_sigma = torch.tanh(sqrt_sigma)
+        # sigma = sqrt_sigma @ sqrt_sigma.T + torch.diag(diag_sigma ** 2)
+        # e = torch.randn_like(mu, device=mu.device, dtype=TORCH_DTYPE)
+        # g = sqrt_sigma @ e
+        # # print(diag(sigma))
+        # loc = torch.zeros(1, device=mu.device, dtype=TORCH_DTYPE)
+        # u = torch.stack([torch.distributions.Normal(loc=loc, scale=sigma[i, i]).cdf(g[i]) for i in range(mu.shape[0])])
+        # u = torch.maximum(u, torch.Tensor([1e-20]).type_as(u))
+        # u = torch.minimum(u, torch.Tensor([1 - 1e-7]).type_as(u))
+        # w = torch.log(mu) + torch.log(u) - torch.log(1 - u)
+
+        w = raw_weights
+
+        topk_soft = GoogleSoftmaxNodeClassifierNetwork.soft_topk(w, k, t)
+        topk_hard = GoogleSoftmaxNodeClassifierNetwork.hard_topk(w, k)
+        return topk_hard + topk_soft - topk_soft.detach()
+
+    def forward(self, A, x=None, params: dict = None):
+        # TODO? after learning mask:
+        # rx_binary = GoogleSoftmaxNodeClassifierNetwork.hard_topk(self.rx, self.n_out)
+        # during learning:
+        rx_binary = GoogleSoftmaxNodeClassifierNetwork.sample_subset_multiGS(self.raw_weights, self.rx, self.rx_sqrt_sigma,
+                                                                             self.rx_diag_sigma, self.n_out, 0.1)[:,0].reshape(-1, 1)
+
+        x = self.classification_layer(A, rx_binary)
 
         return x.double()
 

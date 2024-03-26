@@ -3,7 +3,7 @@ from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.cla
     TopkSoftmaxClassificationLayer, SigmoidClassificationLayer, SoftmaxClassificationLayer, \
     SquaredNormalizedClassificationLayer, IdentityClassificationLayer
 from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks import NNNodeClassifierNetwork, \
-    IdentityNodeClassifierNetwork, GCNNodeClassifierNetwork
+    IdentityNodeClassifierNetwork, GCNNodeClassifierNetwork, GoogleSoftmaxNodeClassifierNetwork
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
@@ -19,6 +19,7 @@ class NodeClassifierNetworkType(Enum):
     NN = 0,
     Identity = 1,
     GCN = 2,
+    GoogleSoftmax = 3,
 
 
 class NodeClassifierNetworkFactory:
@@ -62,6 +63,11 @@ class NodeClassifierNetworkFactory:
                                                                classification_layer=last_layer,
                                                                device=device
                                                                )
+        elif node_classifier_network_type == NodeClassifierNetworkType.GoogleSoftmax:
+            node_classifier_network = GoogleSoftmaxNodeClassifierNetwork(n_nodes=input_dim,
+                                                                         n_out=params["m"],
+                                                                         classification_layer=last_layer,
+                                                                         device=device)
         else:
             raise ValueError(f"Unsupported layer type: {node_classifier_network_type}")
 
