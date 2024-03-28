@@ -61,6 +61,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
     def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
+        self.solver_params['device'] = device_id
+
+        print(f"device={device_id}")
 
         # load graph_similarity_module from dump, due to process weights loading corruption bug
         with open(self.graph_similarity_module_path, 'rb') as file:
@@ -84,12 +87,13 @@ class SimilarityMetricTrainerBase(abc.ABC):
             if val_loader is not None:
                 val_loader.pin_memory = True
 
-        for batch in train_loader:
-            self.__move_batch_to_device(batch)
+        for pair in train_loader.dataset:
+            for graph in pair.s2v_graphs:
+                graph.to(device=self.device, non_blocking=True)
         if val_loader is not None:
-            
-            for batch in val_loader:
-                self.__move_batch_to_device(batch)
+            for pair in val_loader.dataset:
+                for graph in pair.s2v_graphs:
+                    graph.to(device=self.device, non_blocking=True)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
@@ -416,11 +420,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
         for thread in self.threads:
             thread.join()
 
-    def __move_batch_to_device(self, graphs_batch):
-        for pair in graphs_batch:
-            for graph in pair.s2v_graphs:
-                graph.to(device=self.device, non_blocking=True)
-
     def __model_save_while_training(self, model, rank, epoch_ctr=None):
         model_output_path = None
         model_checkpoint_epochs_pace = self.solver_params['model_checkpoint_epochs_pace']
@@ -435,6 +434,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
     def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, q):
+        print(f"_train_loop device={model.embedding_networks[0].gnn_model.get_device()}")
         if dist.is_initialized():
             rank = dist.get_rank()
         else:
