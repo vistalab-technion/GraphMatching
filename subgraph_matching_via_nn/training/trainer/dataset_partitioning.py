@@ -71,8 +71,12 @@ def average_gradients(model):
         return
     for i, param in enumerate(model.parameters()):
         try:
+            
             dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
         except AttributeError:
             # print(f"No grad detected for param with index={i}")
             continue
+        except Exception as e:
+            print(e)
+            raise
         param.grad.data /= size
