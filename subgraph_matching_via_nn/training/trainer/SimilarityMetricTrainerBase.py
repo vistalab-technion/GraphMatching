@@ -51,8 +51,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         # reset tensor values before creating new process,
         # as the combination with CUDA usage sets them to zero for some reason,
         # see https://discuss.pytorch.org/t/multiprocessing-cause-models-parameters-all-become-to-0-0/148183
-        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False,
-                                               device=device_id)
+        self.stub_grad_distance = torch.tensor(float(0), requires_grad=False,
+                                               device=device_id).reshape(-1)
 
         gnn_model = self.graph_similarity_module.embedding_networks[0].gnn_model
 
@@ -62,6 +62,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
     def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
         self.solver_params['device'] = device_id
+        self.composite_solver.params['device'] = device_id
 
         print(f"device={device_id}")
 
@@ -90,10 +91,14 @@ class SimilarityMetricTrainerBase(abc.ABC):
         for pair in train_loader.dataset:
             for graph in pair.s2v_graphs:
                 graph.to(device=self.device, non_blocking=True)
+            if pair.pair_sample_info.localization_state_object is not None:
+                pair.pair_sample_info.localization_state_object.set_device(self.device)
         if val_loader is not None:
             for pair in val_loader.dataset:
                 for graph in pair.s2v_graphs:
                     graph.to(device=self.device, non_blocking=True)
+                if pair.pair_sample_info.localization_state_object is not None:
+                    pair.pair_sample_info.localization_state_object.set_device(self.device)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
@@ -129,7 +134,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_loss_function = MarginLoss(
             solver_params['margin_loss_margin_value'])
 
-        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False, device=self.device)
+        self.stub_grad_distance = torch.tensor(float(0), requires_grad=False, device=self.device).reshape(-1)
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
