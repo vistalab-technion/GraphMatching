@@ -51,8 +51,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
         # reset tensor values before creating new process,
         # as the combination with CUDA usage sets them to zero for some reason,
         # see https://discuss.pytorch.org/t/multiprocessing-cause-models-parameters-all-become-to-0-0/148183
-        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False,
-                                               device=device_id)
+        self.stub_grad_distance = torch.tensor(float(0), requires_grad=False,
+                                               device=device_id).reshape(-1)
 
         gnn_model = self.graph_similarity_module.embedding_networks[0].gnn_model
 
@@ -61,6 +61,10 @@ class SimilarityMetricTrainerBase(abc.ABC):
 
     def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
+        self.solver_params['device'] = device_id
+        self.composite_solver.params['device'] = device_id
+
+        print(f"device={device_id}")
 
         # load graph_similarity_module from dump, due to process weights loading corruption bug
         with open(self.graph_similarity_module_path, 'rb') as file:
@@ -84,12 +88,17 @@ class SimilarityMetricTrainerBase(abc.ABC):
             if val_loader is not None:
                 val_loader.pin_memory = True
 
-        for batch in train_loader:
-            self.__move_batch_to_device(batch)
+        for pair in train_loader.dataset:
+            for graph in pair.s2v_graphs:
+                graph.to(device=self.device, non_blocking=True)
+            if pair.pair_sample_info.localization_state_object is not None:
+                pair.pair_sample_info.localization_state_object.set_device(self.device)
         if val_loader is not None:
-            
-            for batch in val_loader:
-                self.__move_batch_to_device(batch)
+            for pair in val_loader.dataset:
+                for graph in pair.s2v_graphs:
+                    graph.to(device=self.device, non_blocking=True)
+                if pair.pair_sample_info.localization_state_object is not None:
+                    pair.pair_sample_info.localization_state_object.set_device(self.device)
 
         return self._train_loop(self.graph_similarity_module, train_loader, val_loader, q)
 
@@ -125,7 +134,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
         self.graph_similarity_loss_function = MarginLoss(
             solver_params['margin_loss_margin_value'])
 
-        self.stub_grad_distance = torch.tensor(float('nan'), requires_grad=False, device=self.device)
+        self.stub_grad_distance = torch.tensor(float(0), requires_grad=False, device=self.device).reshape(-1)
         self.inference_grad_distance = LocalizationGradDistance(problem_params,
                                                                 solver_params)
                                                                 
@@ -416,11 +425,6 @@ class SimilarityMetricTrainerBase(abc.ABC):
         for thread in self.threads:
             thread.join()
 
-    def __move_batch_to_device(self, graphs_batch):
-        for pair in graphs_batch:
-            for graph in pair.s2v_graphs:
-                graph.to(device=self.device, non_blocking=True)
-
     def __model_save_while_training(self, model, rank, epoch_ctr=None):
         model_output_path = None
         model_checkpoint_epochs_pace = self.solver_params['model_checkpoint_epochs_pace']
@@ -435,6 +439,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
     # if train_loss_convergence_threshold is None, rely on validation loss, cycle_patience, step_size_up and step_size_down
     # otherwise, rely on train loss, train_loss_convergence_threshold and successive_convergence_min_iterations_amount
     def _train_loop(self, model: BaseGraphMetricNetwork, train_loader, val_loader, q):
+        print(f"_train_loop device={model.embedding_networks[0].gnn_model.get_device()}")
         if dist.is_initialized():
             rank = dist.get_rank()
         else:

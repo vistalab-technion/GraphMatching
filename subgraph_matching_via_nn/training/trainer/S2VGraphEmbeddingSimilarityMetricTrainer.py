@@ -38,9 +38,10 @@ class S2VGraphEmbeddingSimilarityMetricTrainer(SimilarityMetricTrainerBase):
         s2v_graph = batch_graph[0]
 
         device = self.solver_params['device']
-        s2v_graph.node_features = s2v_graph.node_features.to(device)
+        s2v_graph.node_features = s2v_graph.node_features.to(device=device)
         s2v_graph.node_mask = annotated_graph.node_indicator.to(device=device)
-
+        s2v_graph.edge_mat = s2v_graph.edge_mat.to(device=device)
+        
         self.annotated_graph_to_converted_s2v_graph_map[annotated_graph] = s2v_graph
 
         return s2v_graph
