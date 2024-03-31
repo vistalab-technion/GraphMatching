@@ -317,6 +317,7 @@ def show_distances_heatmap(graphs, model, device, show_min_off_diagonal: bool = 
     print(f"Off matrix diagonal margin: {get_min_non_diagonal_entry(l2_dists, device, show_min_off_diagonal=show_min_off_diagonal)}")
     print(f"Off matrix diagonal margin: {get_min_non_diagonal_entry(cos_dists, device, show_min_off_diagonal=show_min_off_diagonal)}")
 
+
 def get_examples_distances(trainer, graph_metric_nn, samples):
 
     train_loaders, val_loaders = trainer.get_data_loaders(samples, [], new_samples_amount=0, device_ids=[0])
@@ -324,14 +325,15 @@ def get_examples_distances(trainer, graph_metric_nn, samples):
     positive_distances = []
     negative_distances = []
 
-    # max_pair_batches_to_test = 10
+    def split(a, n):
+        k, m = divmod(len(a), n)
+        return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
 
-    i = 0
-
-    for pairs_batch in train_loaders[0]:
-        # if i >= max_pair_batches_to_test:
-        #     break
-        i += 1
+    # make sure we iterate via batches, but over all samples exactly once
+    dataset = train_loaders[0].dataset
+    n = len(dataset)
+    for batch_indices in list(split(range(n), n // 128)):
+        pairs_batch = [dataset[i] for i in batch_indices]
 
         with torch.no_grad():
             distances = graph_metric_nn.forward(
