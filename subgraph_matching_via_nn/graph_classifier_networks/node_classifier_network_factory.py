@@ -61,6 +61,7 @@ class NodeClassifierNetworkFactory:
                                                                hidden_dim=hidden_dim,
                                                                num_node_features_output=1,
                                                                classification_layer=last_layer,
+                                                               num_mid_layers=params['num_mid_layers'],
                                                                device=device
                                                                )
         elif node_classifier_network_type == NodeClassifierNetworkType.GoogleSoftmax:

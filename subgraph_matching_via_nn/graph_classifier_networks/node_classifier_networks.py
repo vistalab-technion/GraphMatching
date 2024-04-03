@@ -127,17 +127,36 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
 
 class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, num_node_features_input, hidden_dim, num_node_features_output,
+    def __init__(self, num_node_features_input, hidden_dim, num_node_features_output, num_mid_layers,
                  classification_layer, device):
         super(GCNNodeClassifierNetwork, self).__init__(
             classification_layer=classification_layer,
             input_dim=num_node_features_input, device=device)
         self.num_node_features_input = num_node_features_input
-        self.conv1 = GCNConv(num_node_features_input, hidden_dim).to(dtype=TORCH_DTYPE)
-        self.conv2 = GCNConv(hidden_dim, num_node_features_output).to(dtype=TORCH_DTYPE)
-        self.skip_connection = nn.Identity(num_node_features_input,
-                                           num_node_features_output)\
-            .to(dtype=TORCH_DTYPE)  # Skip connection
+        self.fc_in = GCNConv(num_node_features_input, hidden_dim).to(dtype=TORCH_DTYPE)
+
+        self.mid_layers = nn.Sequential()
+        for i in range(num_mid_layers):
+            self.mid_layers.add_module(name=f"fc_{i}",
+                                       module=GCNConv(hidden_dim, hidden_dim).to(dtype=TORCH_DTYPE))
+            self.mid_layers.add_module(name=f"relu_{i}", module=nn.ReLU())
+
+        self.fc_out = GCNConv(hidden_dim, num_node_features_output).to(dtype=TORCH_DTYPE)
+        # self.skip_connection = nn.Identity(num_node_features_input,
+        #                                    num_node_features_output)\
+        #     .to(dtype=TORCH_DTYPE)  # Skip connection
+
+    def init_params(self, default_weights=None):
+        print("ignoring default_weights")
+        with torch.no_grad():
+            self.fc_in.reset_parameters()
+            self.fc_out.reset_parameters()
+
+            for layer in self.mid_layers.children():
+                if hasattr(layer, 'reset_parameters'):
+                    layer.reset_parameters()
+
+            self.classification_layer.init_weights()
 
     def forward(self, A, x=None, params: dict = None):
         edge_index = A.nonzero().t()
@@ -146,12 +165,29 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
             x = torch.ones(A.shape[0], self.num_node_features_input, dtype=TORCH_DTYPE, device=self.device) #TODO: avoid recreating
         else:
             x = x.to(device=self.device)
-        skip_x = self.skip_connection(x)
 
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-        x = x + skip_x
+        x = self.fc_in(x, edge_index)  # Apply first fully-connected layer
+        skip_x = x
+        x = F.relu(x)  # Apply ReLU activation function
+
+        # apply middle layers
+        for mid_layer_i in range(len(self.mid_layers) // 2):
+            gcn_layer_i = mid_layer_i * 2
+            relu_layer_i = gcn_layer_i + 1
+
+            x = self.mid_layers[gcn_layer_i](x, edge_index)
+            x = self.mid_layers[relu_layer_i](x)
+
+        x = x + skip_x  # Add skip connection
+        x = F.relu(x)  # Apply ReLU activation function
+        x = self.fc_out(x, edge_index)  # Apply third fully-connected layer
+
+        # skip_x = self.skip_connection(x)
+        # x = self.conv1(x, edge_index)
+        # x = F.relu(x)
+        # x = self.conv2(x, edge_index)
+        # x = x + skip_x
+
         x = self.classification_layer(A, x)
 
         return x.double()
