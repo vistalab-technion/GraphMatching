@@ -551,6 +551,9 @@ class SimilarityMetricTrainerBase(abc.ABC):
                           else self.get_grad_distance(pair, pair.localization_state_object)
                           for pair in samples]
 
+        grad_distance_term_factor = self.solver_params['grad_distance_term_factor']
+        grad_distances = [elem * grad_distance_term_factor for elem in grad_distances]
+        
         is_negative_sample_flags = [pair.is_negative_sample for pair in samples]
         return get_pairs_batch_aggregated_distance(self.graph_similarity_loss_function,
                                                    emb_distances, grad_distances,
