@@ -1,3 +1,4 @@
+import abc
 from abc import abstractmethod, ABC
 
 import torch
@@ -10,7 +11,7 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         pass
 
     @property
@@ -24,13 +25,19 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
         pass
 
 
+class GraphsBatchEmbeddingNetwork(BaseGraphEmbeddingNetwork, abc.ABC):
+    @abstractmethod
+    def forward_graphs(self, batch_graph):
+        pass
+
+
 class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def __init__(self, n_moments, moments_type='standardized'):
         super().__init__()
         self._moments_type = moments_type
         self._n_moments = n_moments
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         if self._moments_type == 'standardized_central':
             embedding = self.compute_standardized_central_moments(w, A, self._n_moments)
         elif self._moments_type == 'standardized_raw':
@@ -119,7 +126,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._indicator_scale = indicator_scale
         self._zero_eig_scale = zero_eig_scale
 
-    def forward(self, A, w, params: dict = None):
+    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
         H = self.spectral_operator(A, w)
         evals, evecs = torch.linalg.eigh(H)
         embedding = evals[:self._n_eigs]
