@@ -1,6 +1,5 @@
 from typing import Union
 
-import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 import torch
@@ -9,6 +8,7 @@ import numpy as np
 from scipy.stats import norm
 import seaborn as sns
 
+from common.graph_utils import SubGraphGenerator
 from subgraph_matching_via_nn.utils.graph_utils import \
     node_indicator_from_edge_indicator
 
@@ -16,7 +16,9 @@ TORCH_DTYPE = torch.float64
 NP_DTYPE = np.float64
 
 
-def plot_indicator(w_list, labels, ax):
+def plot_indicator(w_list, labels):
+    fig, ax = plt.subplots(1, 1, figsize=[18, 4])
+
     # Sort the flattened array independently
     idx = np.argsort(w_list[0], axis=0)
     sorted_w_list = [w[idx].squeeze(-1) for w in w_list]
@@ -82,9 +84,74 @@ def top_m(w, m):
     return w_th
 
 
-def uniform_dist(n):
-    x = torch.ones(n, 1, dtype=TORCH_DTYPE)
+def uniform_dist(n, device='cpu'):
+    x = torch.ones(n, 1, dtype=TORCH_DTYPE, device=device)
     return x / x.sum()
+
+
+def get_node_indicator(G: nx.graph, G_sub: nx.graph):
+    """
+    Create node indicator for G_sub in G (assuming G_sub was extracted from G)
+
+    :param G: A networkx graph
+    :param G_sub: A networkx sub-graph of G
+    :return: w_indicator - a vector with w[i] ==1 if node i of G is a node in G_sub
+    , otherwise w_indicator[i]==0.
+    """
+    # Set the indices corresponding to the subgraph nodes to 1
+    subgraph_node_indices = [list(G.nodes()).index(node) for node in G_sub.nodes()]
+    # subgraph_node_indices = list(G_sub.nodes())
+    w_indicator = np.zeros(len(G.nodes()))
+    w_indicator[subgraph_node_indices] = 1.0
+    return w_indicator
+
+
+def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
+    """
+    Create edge indicator for G_sub in G (assuming G_sub was extracted from G)
+
+    :param G: A networkx graph
+    :param G_sub: A networkx sub-graph of G
+    :return: edge_indicator - dict with values
+    edge_indicator[(i,j)] == edge_indicator[(j,i)] ==1 if (i,j) is an edge of G_sub,
+    and 0 otherwise.
+    """
+    edge_indicator = \
+        {(min(u, v), max(u, v)): 1 if (min(u, v), max(u, v))
+                                      in G_sub.edges() else 0 for u, v in G.edges()}
+
+    # Create symmetric adjacency matrix
+    num_nodes = len(G.nodes())
+    adj_matrix = np.zeros((num_nodes, num_nodes))
+    # generate adjacency matrix with graph nodes mapping to the matrix indices
+    _, graph_node_to_adj_node_map = SubGraphGenerator.generate_adj_matrix_with_nodes_mapping(
+        G)
+
+    for (i, j), val in edge_indicator.items():
+        mapped_i = graph_node_to_adj_node_map[i]
+        mapped_j = graph_node_to_adj_node_map[j]
+        adj_matrix[mapped_i][mapped_j] = val
+        adj_matrix[mapped_j][mapped_i] = val  # Ensure it's symmetric
+
+    return edge_indicator, adj_matrix
+
+
+def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
+    # Create node incident vector
+    w = [0] * len(G.nodes())
+    for node in G.nodes():
+        # Get incident edges for node
+        incident_edges = [(min(node, neighbor), max(node, neighbor)) for neighbor in
+                          G.neighbors(node)]
+
+        # Calculate average of edge_indicator values for the incident edges
+        edge_indicator_values = [edge_indicator[edge] for edge in incident_edges]
+        avg_value = 0
+        if len(edge_indicator_values) != 0:
+            avg_value = max(edge_indicator_values)
+
+        w[list(G.nodes).index(node)] = float(avg_value)
+    return w
 
 
 def plot_graph_with_colors(G: nx.graph,
@@ -96,8 +163,7 @@ def plot_graph_with_colors(G: nx.graph,
     """
 
     :param G: graph
-    :param G_sub: sub_graph of G
-    :param distribution: either a node distribution (numpy array) or and edge
+    :param distribution: either a node distribution (numpy array) or an edge
     distribution
     (dict of {edge tuple : distribution value})
     :param title: title for the plot
@@ -169,13 +235,19 @@ def plot_graph_with_colors(G: nx.graph,
         nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8,
                                 font_color='blue', ax=ax)
 
+    if ax is not None:
+        ax.set_axis_off()  # Turn off the axis
+
     # Add colorbar
     if distribution is not None and colorbar:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         plt.colorbar(sm, ax=ax)
 
-
     if ax is not None:
-        ax.set_axis_off()
         ax.set_title(title)
+
+
+def get_graph_adj_mat_as_tensor(g: nx.graph):
+    # return torch.from_numpy(nx.to_numpy_array(g)).type(TORCH_DTYPE)
+    return torch.from_numpy((nx.adjacency_matrix(g)).toarray()).type(TORCH_DTYPE)
