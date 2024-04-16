@@ -75,6 +75,9 @@ def load_graph(type: str = 'random',
 
         remove_isolated_nodes_from_graph(G_sub)
 
+        G.remove_edges_from(nx.selfloop_edges(G))
+        G_sub.remove_edges_from(nx.selfloop_edges(G_sub))
+
         node_indicator = get_node_indicator(G=G, G_sub=G_sub)
         edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
 

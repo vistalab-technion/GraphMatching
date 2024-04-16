@@ -8,8 +8,13 @@ import networkx as nx
 import torch
 from joblib import Parallel, delayed
 from tqdm import tqdm
+import torch_geometric as tg
+# from tqdm.auto import tqdm
 from common.logger import TimeLogging
 from common.parallel_computation import tqdm_joblib
+
+import torch.multiprocessing as mp
+mp.set_sharing_strategy('file_system')
 
 
 def relabel_graph_nodes_by_contiguous_order(g: nx.Graph, copy):
@@ -180,3 +185,51 @@ class SubGraphGenerator:
         curr_time = TimeLogging.log_time(curr_time, "finished generating subgraphs")
 
         return subgraphs_list
+
+class GraphNeighbourhoodsDecomposer:
+
+    @staticmethod
+    def k_hop_nbr_nx(nx_g, src, n_hops, is_convert_node_labels_to_integers=True):
+        ego_graph = nx.ego_graph(nx_g, src, n_hops)
+        if is_convert_node_labels_to_integers:
+            ego_graph = nx.convert_node_labels_to_integers(ego_graph)
+            return tg.utils.from_networkx(ego_graph)
+        return ego_graph
+
+    nx_g, n_hops = None, None
+
+    @staticmethod
+    def k_hop_nbr_init(*args):
+        global nx_g, n_hops
+        graph, n_hops, take_only_directed_edges = args
+        nx_g = tg.utils.to_networkx(graph, node_attrs=['x'], to_undirected=take_only_directed_edges,
+                                    remove_self_loops=False)
+
+    @staticmethod
+    def k_hop_nbr_func(args):
+        src, is_convert_node_labels_to_integers = args
+        return src, GraphNeighbourhoodsDecomposer.k_hop_nbr_nx(nx_g, src, n_hops,
+                                 is_convert_node_labels_to_integers=is_convert_node_labels_to_integers)
+
+    @staticmethod
+    def decompose(graphs, n_hops, n_workers, take_only_directed_edges=True, is_convert_node_labels_to_integers=True):
+        tqdm.write('decompose into neighborhoods')
+        ret = []
+        for graph in tqdm(graphs, desc='graphs'):
+            r = [None] * graph.num_nodes
+            tqdm.write(f'n_workers: {n_workers}')
+            if n_workers == 1:
+                GraphNeighbourhoodsDecomposer.k_hop_nbr_init(graph, n_hops, take_only_directed_edges)
+                for src, nbr in tqdm(
+                        map(GraphNeighbourhoodsDecomposer.k_hop_nbr_func, [(i, is_convert_node_labels_to_integers) for i in range(graph.num_nodes)]),
+                        desc='nbrs', total=graph.num_nodes):
+                    r[src] = nbr
+            else:
+                with mp.Pool(n_workers, GraphNeighbourhoodsDecomposer.k_hop_nbr_init, (graph, n_hops, take_only_directed_edges)) as p:
+                    for src, nbr in tqdm(p.imap_unordered(GraphNeighbourhoodsDecomposer.k_hop_nbr_func,
+                                                          [(i, is_convert_node_labels_to_integers) for i in
+                                                           range(graph.num_nodes)]), desc='nbrs',
+                                         total=graph.num_nodes):
+                        r[src] = nbr
+            ret += r
+        return ret
