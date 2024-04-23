@@ -85,11 +85,15 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         self.fc_in = nn.Linear(input_dim, hidden_dim,
                                dtype=TORCH_DTYPE)  # First Fully-Connected Layer
         self.mid_layers = nn.Sequential()
+        self.hidden_linear_layers = []
+
         for i in range(num_mid_layers):
+            hidden_linear_layer = nn.Linear(hidden_dim, hidden_dim,
+                                                        dtype=TORCH_DTYPE)
+            self.hidden_linear_layers.append(hidden_linear_layer)
             self.mid_layers.add_module(name=f"fc_{i}",
-                                       module=nn.Linear(hidden_dim, hidden_dim,
-                                                        dtype=TORCH_DTYPE))
-            self.mid_layers.add_module(name=f"relu_{i}", module=nn.ReLU())
+                                       module=hidden_linear_layer)
+            self.mid_layers.add_module(name=f"relu_{i}", module=nn.LeakyReLU())
 
         self.fc_out = nn.Linear(hidden_dim, output_dim,
                                 dtype=TORCH_DTYPE)  # Third Fully-Connected Layer with output size output_dim
@@ -100,9 +104,14 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
             self.fc_in.reset_parameters()
             self.fc_out.reset_parameters()
 
-            for layer in self.mid_layers.children():
+            mid_layers = list(self.mid_layers.children())
+            for layer in mid_layers:
                 if hasattr(layer, 'reset_parameters'):
                     layer.reset_parameters()
+
+            for layer in [self.fc_in, self.fc_out] + self.hidden_linear_layers:
+                nn.init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.zeros_(layer.bias)
 
             self.classification_layer.init_weights()
 
@@ -114,10 +123,10 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         x = self.fc_in(x)  # Apply first fully-connected layer
         skip_x = x
-        x = F.relu(x)  # Apply ReLU activation function
+        x = F.leaky_relu(x)  # Apply ReLU activation function
         x = self.mid_layers(x)  # Apply second fully-connected layer
         x = x + skip_x  # Add skip connection
-        x = F.relu(x)  # Apply ReLU activation function
+        x = F.leaky_relu(x)  # Apply ReLU activation function
         x = self.fc_out(x)  # Apply third fully-connected layer
         # x = torch.matmul(A, x.T)  # Apply adjacency matrix multiplication
         x = x.T
@@ -139,7 +148,7 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
         for i in range(num_mid_layers):
             self.mid_layers.add_module(name=f"fc_{i}",
                                        module=GCNConv(hidden_dim, hidden_dim).to(dtype=TORCH_DTYPE))
-            self.mid_layers.add_module(name=f"relu_{i}", module=nn.ReLU())
+            self.mid_layers.add_module(name=f"relu_{i}", module=nn.LeakyReLU())
 
         self.fc_out = GCNConv(hidden_dim, num_node_features_output).to(dtype=TORCH_DTYPE)
         # self.skip_connection = nn.Identity(num_node_features_input,
@@ -168,7 +177,7 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         x = self.fc_in(x, edge_index)  # Apply first fully-connected layer
         skip_x = x
-        x = F.relu(x)  # Apply ReLU activation function
+        x = F.leaky_relu(x)  # Apply ReLU activation function
 
         # apply middle layers
         for mid_layer_i in range(len(self.mid_layers) // 2):
@@ -179,12 +188,12 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
             x = self.mid_layers[relu_layer_i](x)
 
         x = x + skip_x  # Add skip connection
-        x = F.relu(x)  # Apply ReLU activation function
+        x = F.leaky_relu(x)  # Apply ReLU activation function
         x = self.fc_out(x, edge_index)  # Apply third fully-connected layer
 
         # skip_x = self.skip_connection(x)
         # x = self.conv1(x, edge_index)
-        # x = F.relu(x)
+        # x = F.leaky_relu(x)
         # x = self.conv2(x, edge_index)
         # x = x + skip_x
 
