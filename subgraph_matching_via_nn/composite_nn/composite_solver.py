@@ -210,10 +210,13 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
             # f"{os.linesep}w: {w}"
             # f"{os.linesep}#0 grad entries: {(params_grads == 0).sum()}/{params_grads.shape[0]}"
 
+    def __get_model_params(self):
+        return list(self.composite_nn.parameters())
+
     def _create_optimizer(self):
         lr = self.params['lr']
         solver_type = self.params.get("solver_type", None)
-        model_params = self.composite_nn.parameters()
+        model_params = self.__get_model_params()
         if solver_type == 'gd':
             optimizer = optim.SGD(params=model_params, lr=lr)
         elif solver_type == 'lbfgs':
@@ -228,7 +231,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
             optimizer = optim.Adam(model_params, lr=lr, weight_decay=weight_decay)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
-        return optimizer
+        return optimizer, model_params
 
     def forward(self, input_graphs):
         """
@@ -247,10 +250,11 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         return loss + reg
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
+        max_grad_norm = self.params['max_grad_norm']
         A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
 
         self.composite_nn.train() # Set the model to training mode
-        optimizer = self._create_optimizer()
+        optimizer, model_params = self._create_optimizer()
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
             def closure():
@@ -264,6 +268,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
 
                 optimizer.zero_grad()
                 full_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model_params, max_grad_norm)
 
                 self.__log_loss(iteration, loss, reg, w)
 
