@@ -4,6 +4,7 @@ import networkx as nx
 import numpy as np
 import scipy as sp
 
+from subgraph_matching_via_nn.mask_binarization.LP_binarization import solve_maximum_weight_subgraph
 from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix
 from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
 
@@ -21,6 +22,7 @@ class IndicatorBinarizationType(Enum):
     Diffusion = 3,
     zoomout = 4,
     nonlinear_zoomout = 5,
+    mwksp = 6,
 
 
 class IndicatorDistributionBinarizer:
@@ -100,6 +102,16 @@ class IndicatorDistributionBinarizer:
 
                 # Binarize by keeping the largest m components
                 w_th = top_m(heat_w, params["m"])
+        elif type == IndicatorBinarizationType.mwksp:
+            num_nodes = params['m']
+            num_edges = params['n']
+
+            A = (nx.adjacency_matrix(graph)).toarray()
+            selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, num_nodes, num_edges)
+            print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
+            print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
+            w_th = np.zeros([len(graph.nodes()), 1])
+            w_th[selected_nodes] = 1.0
         else:
             w_th = w
 
