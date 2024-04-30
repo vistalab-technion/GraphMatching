@@ -110,7 +110,7 @@ class LocalizationBinarizationSimulator:
         return w_all
 
     def save_localization_results(self, sub_graph, processed_sub_graph, w_all, w_init, output_dir_path, output_path):
-        gt_indicator = sub_graph.edge_indicator if self.to_line else sub_graph.node_indicator
+        gt_indicator = sub_graph.gt_indicator
         gt_indicator_tensor = self.composite_nn.init_network_with_indicator(processed_sub_graph)
         w_star = self.node_classifier_network(A = processed_sub_graph.A_full, params = self.params).detach().cpu().numpy()
 

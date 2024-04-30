@@ -30,6 +30,7 @@ class GraphProcessor(BaseGraphProcessor):
         processed_G = sub_graph.G
         edge_indicator = sub_graph.edge_indicator
         node_indicator = sub_graph.node_indicator
+        original_node_indicator = sub_graph.node_indicator
         is_line_graph = False
 
         # performing a sequence of operations on the graph as a pre-process
@@ -44,6 +45,10 @@ class GraphProcessor(BaseGraphProcessor):
             if edge_indicator is not None:
                 node_indicator = np.array([edge_indicator[edge] for edge in
                                            processed_G.nodes()])
+                edge_indicator = original_node_indicator
+            else:
+                node_indicator = None
+                edge_indicator = None
 
         if edge_indicator is not None:
             G_sub_as_sub_graph = SubGraph(sub_graph.G_sub, None, None, None)

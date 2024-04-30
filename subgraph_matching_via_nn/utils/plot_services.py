@@ -17,7 +17,7 @@ class PlotServices:
 
         fig, axes = plt.subplots(1, n_subplots, figsize=(16, 4))
 
-        plot_graph_with_colors(G=G, distribution=sub_graph.distribution_indicator, ax=axes[0],
+        plot_graph_with_colors(G=G, distribution=sub_graph.original_edge_distribution_indicator, ax=axes[0],
                                colorbar=False, title='Full graph', seed=self.seed, draw_labels=True)
         plot_graph_with_colors(G=G_sub, ax=axes[1], colorbar=False,
                                title='Sub-graph', seed=self.seed, draw_labels=True)

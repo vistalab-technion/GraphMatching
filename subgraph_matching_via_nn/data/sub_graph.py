@@ -41,7 +41,11 @@ class SubGraph:
         TORCH_DTYPE)
 
     @property
-    def distribution_indicator(self):
+    def gt_indicator(self):
+        return None if self.is_line_graph else self.node_indicator
+
+    @property
+    def original_edge_distribution_indicator(self):
         if self.is_line_graph:
             return self.node_indicator
         else:
