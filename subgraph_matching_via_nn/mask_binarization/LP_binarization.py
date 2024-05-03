@@ -47,21 +47,3 @@ def solve_maximum_weight_subgraph(weights, adjacency_matrix, requested_num_nodes
 
     # Return the selected nodes and edges
     return selected_nodes, selected_edges
-
-
-# Example usage
-weights = [3, 4, 5, 2, 1]
-adjacency_matrix = [
-    [0, 1, 1, 0, 0],
-    [1, 0, 1, 0, 0],
-    [1, 1, 0, 1, 0],
-    [0, 0, 1, 0, 1],
-    [0, 0, 0, 1, 0]
-]
-k = 3  # Number of nodes in the subgraph
-l = 3  # Number of edges in the subgraph
-
-selected_nodes, selected_edges = solve_maximum_weight_subgraph(weights,
-                                                               adjacency_matrix, k, l)
-print("Selected nodes:", selected_nodes)
-print("Selected edges:", selected_edges)
