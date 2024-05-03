@@ -813,8 +813,10 @@ def calc_margin_loss_for_pairs(trainer, graph_metric_nn, solver_params, pairs):
 
     calc_margin_loss(torch.tensor(train_positive_distances+train_negative_distances), torch.cat((torch.ones(len(train_positive_distances)), torch.zeros(len(train_negative_distances)))), margin = solver_params['margin_loss_margin_value'])
 
-    plot_histogram(train_positive_distances, "positive pair distances", min_range=0)
-    plot_histogram(train_negative_distances, "negative pair distances", min_range=0)
+    if len(train_positive_distances) > 0:
+      plot_histogram(train_positive_distances, "positive pair distances", min_range=0)
+    if len(train_negative_distances) > 0:
+      plot_histogram(train_negative_distances, "negative pair distances", min_range=0)
 
     return train_positive_distances, train_negative_distances
 
