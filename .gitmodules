@@ -1,0 +1,3 @@
+[submodule "powerful_gnns"]
+	path = powerful_gnns
+	url = git@github.com:gitplayer/powerful_gnns.git

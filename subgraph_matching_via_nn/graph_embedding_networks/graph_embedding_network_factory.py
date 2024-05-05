@@ -19,7 +19,7 @@ class GraphEmbeddingNetworkFactory:
 
     @staticmethod
     def create_embedding_networks(sub_graph, params, embedding_network_types: List[EmbeddingNetworkType]):
-        indicator_size = params["m"]
+        indicator_size = params["num_nodes"]
 
         embedding_nns = []
         for embedding_network_type in embedding_network_types:

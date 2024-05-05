@@ -30,6 +30,7 @@ seaborn = "*"
 torchsort = "*"
 polyrat = "*"
 jupyter = "*"
+igraph = "*"
 
 [dev-packages]
 pytest = "*"

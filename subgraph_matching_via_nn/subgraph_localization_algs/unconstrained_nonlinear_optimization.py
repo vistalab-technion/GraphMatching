@@ -99,7 +99,7 @@ def nn_subgraph_localization(G: nx.graph,
 # regularization terms
 
 def spectral_reg(A, w, params):
-    v = 1 - w * (params["m"])
+    v = 1 - w * (params["num_nodes"])
     E = graph_edit_matrix(A, v)
     L_edited = laplacian(A - E)
     reg = torch.norm(L_edited @ v, p=2) ** 2
@@ -119,13 +119,13 @@ def graph_entropy(A, w, params):
 
 
 def binary_penalty(A, w, params):
-    # reg = torch.norm(w * (1/params["m"] - w), p=2) ** 2
-    reg = torch.sum(w * (1 / params["m"] - w) ** 2)
+    # reg = torch.norm(w * (1/params["num_nodes"] - w), p=2) ** 2
+    reg = torch.sum(w * (1 / params["num_nodes"] - w) ** 2)
     return reg
 
 
 def log_barrier_penalty(A, w, params):
-    v = 1 - w * (params["m"])
+    v = 1 - w * (params["num_nodes"])
     evals, evecs = torch.linalg.eigh(hamiltonian(A, v, params["diagonal_scale"]))
     lambda_second = evals[1]
     c = params['second_eig']

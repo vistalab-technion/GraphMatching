@@ -36,7 +36,7 @@ class BaseNodeClassifierNetwork(nn.Module):
     # @staticmethod
     # def diff_binarize(w: torch.Tensor, params: dict):
     #     rank = torchsort.soft_rank(w.T, regularization_strength=0.1)
-    #     idx = ((rank - params['m']) >= 0).squeeze()
+    #     idx = ((rank - params["num_nodes"]) >= 0).squeeze()
     #     w_th = torch.zeros_like(w)
     #     w_th[idx] = w[idx]
     #     return w_th
