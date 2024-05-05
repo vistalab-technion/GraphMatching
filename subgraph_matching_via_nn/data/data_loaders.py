@@ -6,11 +6,11 @@ import networkx as nx
 
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
     sample_connected_subgraph, generate_wheel_graph, generate_random_graph, \
-    generate_graph_with_unique_degrees
+    generate_graph_with_unique_degrees, generate_random_join_degree_graph
 from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator, \
     get_edge_indicator
 
-GRAPH_TYPES = ['random', 'random_tree', 'wheel', 'unique_degree', 'example',
+GRAPH_TYPES = ['random', 'random_tree', 'wheel', 'unique_degree', 'joint_degree', 'example',
                'subcircuit']
 
 
@@ -44,6 +44,8 @@ def load_graph(type: str = 'random',
             G = generate_wheel_graph(n)
         elif type == 'unique_degree':
             G = generate_graph_with_unique_degrees(n)
+        elif type == 'joint_degree':
+            G = generate_random_join_degree_graph(n)
         else:
             error('error, graph type not supported')
 

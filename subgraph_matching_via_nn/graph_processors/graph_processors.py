@@ -124,10 +124,13 @@ class GraphProcessor(BaseGraphProcessor):
                 # Binarize by keeping the largest m components
                 w_th = top_m(heat_w, params["m"])
         elif type == 'mwksp':
-
+            # todo: switch beforehand to original graph,
+            #  and add maxium weighted edge subgraph algorithm
             A = (nx.adjacency_matrix(graph)).toarray()
             selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, params[
                 "num_nodes"], params["num_edges"])
+            print(f'{selected_nodes=}')
+            print(f'{selected_edges=}')
             print(f'requested: n_nodes = {params["num_nodes"]}, n_edges : {params["num_edges"]}')
             print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
             w_th = np.zeros([len(graph.nodes()), 1])

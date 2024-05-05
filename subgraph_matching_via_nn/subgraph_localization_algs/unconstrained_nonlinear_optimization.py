@@ -43,7 +43,7 @@ def nn_subgraph_localization(G: nx.graph,
 
     # set solver
     solver_type = params.get("solver_type", None)
-    if solver_type == 'gd':
+    if solver_type == 'sgd':
         optimizer = optim.SGD(params=composite_nn.parameters(), lr=lr)
     elif solver_type == 'lbfgs':
         optimizer = optim.LBFGS(params=composite_nn.parameters(), lr=lr, max_iter=5,
@@ -52,6 +52,8 @@ def nn_subgraph_localization(G: nx.graph,
                                 tolerance_change=1e-09,
                                 history_size=10,
                                 line_search_fn=None)
+    elif solver_type == 'Adam':
+        optimizer = optim.Adam(params=composite_nn.parameters(), lr=lr)
     else:
         raise ValueError(f"Unknown optimizer choice: {solver_type}")
 
