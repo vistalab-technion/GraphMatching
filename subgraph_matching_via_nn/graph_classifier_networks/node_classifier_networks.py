@@ -26,6 +26,7 @@ class BaseNodeClassifierNetwork(nn.Module):
         self.input_dim = input_dim
 
     def train_node_classifier(self,
+                              G: nx.graph = None,
                               G_sub: nx.graph = None,
                               graph_generator: BaseGraphGenerator = None):
         # Todo: create examples with the graph generator

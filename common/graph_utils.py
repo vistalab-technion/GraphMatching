@@ -184,7 +184,7 @@ class SubGraphGenerator:
 
         curr_time = TimeLogging.log_time(curr_time, "finished generating subgraphs")
 
-        return subgraphs_list
+        return subgraphs_list, [elem for chunk in chunks for elem in chunk]
 
 class GraphNeighbourhoodsDecomposer:
 

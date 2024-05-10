@@ -480,7 +480,7 @@ def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_paral
     curr_time = TimeLogging.log_time(None, "start generate_k_subgraphs")
 
     
-    k_subgraphs = SubGraphGenerator.generate_k_subgraphs(source_graph, k=k, is_parallel=is_parallel)
+    k_subgraphs, _ = SubGraphGenerator.generate_k_subgraphs(source_graph, k=k, is_parallel=is_parallel)
     k_subgraph_annotated_graphs = [AnnotatedGraph(g, label=i) for i, g in enumerate(k_subgraphs)]
     
     curr_time = TimeLogging.log_time(curr_time, "end generate_k_subgraphs")

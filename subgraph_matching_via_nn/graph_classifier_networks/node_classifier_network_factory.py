@@ -1,4 +1,7 @@
 from enum import Enum
+
+from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_node_classifier_network import \
+    GANNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.classification_layer import \
     TopkSoftmaxClassificationLayer, SigmoidClassificationLayer, SoftmaxClassificationLayer, \
     SquaredNormalizedClassificationLayer, IdentityClassificationLayer
@@ -20,6 +23,7 @@ class NodeClassifierNetworkType(Enum):
     Identity = 1,
     GCN = 2,
     GoogleSoftmax = 3,
+    GAN = 5,
 
 
 class NodeClassifierNetworkFactory:
@@ -69,6 +73,10 @@ class NodeClassifierNetworkFactory:
                                                                          n_out=params["m"],
                                                                          classification_layer=last_layer,
                                                                          device=device)
+        elif node_classifier_network_type == NodeClassifierNetworkType.GAN:
+            node_classifier_network = GANNodeClassifierNetwork(noise_dim=hidden_dim,
+                                                               classification_layer=last_layer,
+                                                               device=device)
         else:
             raise ValueError(f"Unsupported layer type: {node_classifier_network_type}")
 
