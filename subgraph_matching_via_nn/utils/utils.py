@@ -48,7 +48,7 @@ def plot_degree_distribution(graph, n_moments=4, ax=None):
     degree_sequence = [degree / n for _, degree in graph.degree()]
 
     # Plot the degree distribution
-    sns.histplot(degree_sequence, bins='auto', stat='density',
+    sns.histplot(np.array(degree_sequence).reshape(-1, 1), bins='auto', stat='density',
                  label='Normalized Degree Histogram', ax=ax)
 
     # Fit a distribution to the data
