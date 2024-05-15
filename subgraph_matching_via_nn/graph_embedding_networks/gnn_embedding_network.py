@@ -21,7 +21,7 @@ class GNNEmbeddingNetwork(GraphsBatchEmbeddingNetwork):
             s2v_graph = self.last_used_s2v_graph
         else:
             # A -> nx.Graph
-            G = nx.from_numpy_matrix(A.detach().cpu().numpy())
+            G = nx.from_numpy_array(A.detach().cpu().numpy())
 
             # nx.Graph -> S2VGraph
             s2v_graph = S2VGraph(G, label=None)
