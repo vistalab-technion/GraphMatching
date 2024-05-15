@@ -2,6 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/bgan-pytorch" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/bgan_pytorch" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/powerful_gnns" vcs="Git" />
   </component>
 </project>

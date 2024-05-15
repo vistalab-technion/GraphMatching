@@ -5,8 +5,11 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+
+from bgan_pytorch.bgan.utils import get_activation_by_name
 from common.graph_utils import SubGraphGenerator
 from common.logger import TimeLogging
+from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.GAN import bggan_train
 from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.dataset import gan_dataset
 from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.discriminator_model import Discriminator
 from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_trainer import GANTrainer
@@ -17,8 +20,10 @@ from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator
 
 
 class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
-    def __init__(self, noise_dim, classification_layer, device):
+    def __init__(self, noise_dim, classification_layer, device, num_workers, use_simple_gan):
         super().__init__(classification_layer=classification_layer, input_dim=None, device=device)
+        self.num_workers = num_workers
+        self.use_simple_gan = use_simple_gan
         self.latent_dim = noise_dim
 
         weights_tensor = torch.zeros((1, noise_dim), device=self.device)
@@ -35,6 +40,7 @@ class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
         self.batch_size = 512
         self.num_epochs = 500
         self.lr = 0.0002
+        self.activation_name = 'elu'
 
     def train_node_classifier(self,
                               G: nx.graph = None,
@@ -53,8 +59,10 @@ class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
         # MODEL INITIALIZATION
         num_features = len(node_indicators[0].reshape(-1))
 
-        generator = Generator(self.latent_dim, num_features, device=self.device)
-        discriminator = Discriminator(num_features, device=self.device)
+        activation = get_activation_by_name(self.activation_name)
+
+        generator = Generator(self.latent_dim, num_features, device=self.device, activation=activation)
+        discriminator = Discriminator(num_features, device=self.device, activation=activation)
 
         # Create a dataloader of the dataset
 
@@ -68,7 +76,17 @@ class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         # train
         dtype = self.noise_input.dtype
-        GANTrainer.train_gan(discriminator, generator, dataloader, self.num_epochs, self.lr, dtype, self.device)
+
+        if self.use_simple_gan:
+            # train models
+            GANTrainer.train_gan(discriminator, generator, dataloader, self.num_epochs, self.lr, dtype, self.device)
+        else:
+            num_workers = self.num_workers
+            run_name = "DEMO_GAN"
+            bggan_train(run_name, self.device, generator, discriminator, dataset, activation=activation,
+                        use_spectral_norm=True, d_lr=self.lr, g_lr=self.lr, batch_size=batch_size,
+                        n_sample=min(16, dataset_size), n_mc_samples=20, num_workers=num_workers, epochs=self.num_epochs,
+                        log_every=20, sample_every=self.num_epochs, dtype=dtype)
 
         return generator
 
@@ -84,7 +102,7 @@ class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         w = self.classification_layer(A, x)
 
-        return w
+        return w.reshape(-1, 1)
 
     def init_params(self, default_weights=None):
         with torch.no_grad():

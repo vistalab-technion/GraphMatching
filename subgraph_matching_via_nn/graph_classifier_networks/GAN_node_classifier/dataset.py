@@ -1,8 +1,7 @@
 import torch
-from torch.utils.data import Dataset
+from bgan_pytorch.bgan.datasets import BaseQuantizedImageDataset
 
-
-class gan_dataset(Dataset):
+class gan_dataset(BaseQuantizedImageDataset):
     def __init__(self, dataframe):
         self.data = dataframe.values.astype(float)
         self.labels = dataframe.values.astype(float)
@@ -16,3 +15,10 @@ class gan_dataset(Dataset):
             'label': torch.tensor(self.labels[idx])
         }
         return sample
+
+    @property
+    def num_colors(self):
+        return 2 # as the distribution is binary per feature
+
+    # def dequantize(self, img):
+    #     return img
