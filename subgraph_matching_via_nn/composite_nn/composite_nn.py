@@ -11,6 +11,7 @@ from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import
     BaseGraphEmbeddingNetwork
 from subgraph_matching_via_nn.mask_binarization.binarized_modules import quantize, Quantize, BinarizeLayer, \
     QuantizeLayer
+from subgraph_matching_via_nn.utils.graph_utils import get_normalized_node_indicator
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
 
@@ -74,8 +75,8 @@ class CompositeNeuralNetwork(nn.Module):
             GT indicator as a distribution vector
             Initial prescribed indicator distribution vector
         """
-        gt_indicator_tensor = torch.tensor(gt_node_indicator_processed)[:, None].type(TORCH_DTYPE)
-        gt_indicator_tensor = gt_indicator_tensor / gt_indicator_tensor.sum()
+
+        gt_indicator_tensor = get_normalized_node_indicator(gt_node_indicator_processed, dtype=TORCH_DTYPE)
 
         gt_indicator_factor = 1 if is_based_on_gt_indicator else 0
         x0 = (gt_indicator_factor * gt_indicator_tensor.clone() +

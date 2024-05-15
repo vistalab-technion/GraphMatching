@@ -38,7 +38,7 @@ def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
     edge_indicator = \
         {(u, v): 1 if (u, v) in G_sub.edges() else 0 for (u, v) in G.edges()}
     # Create symmetric adjacency matrix
-    num_nodes = len(G.nodes())
+    num_nodes = 1 + max(G.nodes())
     adj_matrix = np.zeros((num_nodes, num_nodes))
 
     for (i, j), val in edge_indicator.items():
@@ -66,6 +66,12 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
         w[list(G.nodes).index(node)] = float(node_indicator_value)
     return w
 
+
+def get_normalized_node_indicator(raw_node_indicator, dtype):
+    gt_indicator_tensor = torch.tensor(raw_node_indicator)[:, None].type(dtype)
+    gt_indicator_tensor = gt_indicator_tensor / gt_indicator_tensor.sum()
+
+    return gt_indicator_tensor
 
 def laplacian(A):
     L = diag(A.sum(dim=1)) - A

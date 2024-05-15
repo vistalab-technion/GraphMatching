@@ -1,15 +1,10 @@
 import pickle
 from logging import exception
-
-import numpy as np
 import networkx as nx
 
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
-from subgraph_matching_via_nn.utils.utils import get_node_indicator, get_edge_indicator
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
     sample_connected_subgraph, generate_wheel_graph, generate_random_graph
-from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator, \
-    get_edge_indicator
 
 
 def load_graph(type: str = 'random',
@@ -41,9 +36,6 @@ def load_graph(type: str = 'random',
         # Create the subgraph by keeping only the edges that connect the selected subset of nodes
         G_sub = G.subgraph(subgraph_nodes)
 
-        node_indicator = get_node_indicator(G=G, G_sub=G_sub)
-        edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
-
     elif type == 'example':
         # A fixed synthetic example
 
@@ -57,9 +49,6 @@ def load_graph(type: str = 'random',
         # Create the graph from the adjacency matrices
         G = nx.from_edgelist(circuit_edges)
         G_sub = G.edge_subgraph(subcircuit_edges)
-
-        node_indicator = get_node_indicator(G=G, G_sub=G_sub)
-        edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
 
     elif 'subcircuit':
 
@@ -78,13 +67,10 @@ def load_graph(type: str = 'random',
         G.remove_edges_from(nx.selfloop_edges(G))
         G_sub.remove_edges_from(nx.selfloop_edges(G_sub))
 
-        node_indicator = get_node_indicator(G=G, G_sub=G_sub)
-        edge_indicator, subgraph_adj_matrix = get_edge_indicator(G=G, G_sub=G_sub)
-
     else:
         raise exception(f"type = {type} not supported")
 
-    return SubGraph(G, G_sub, node_indicator, edge_indicator)
+    return SubGraph(G, G_sub)
 
 #
 # # Set the size of the graph and the subgraph

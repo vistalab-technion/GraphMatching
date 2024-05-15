@@ -29,7 +29,6 @@ class GraphProcessor(BaseGraphProcessor):
     def pre_process(self, sub_graph: SubGraph):
         processed_G = sub_graph.G
         edge_indicator = sub_graph.edge_indicator
-        node_indicator = sub_graph.node_indicator
         original_node_indicator = sub_graph.node_indicator
         is_line_graph = False
 
@@ -43,17 +42,14 @@ class GraphProcessor(BaseGraphProcessor):
             is_line_graph = True
             processed_G = nx.line_graph(processed_G)
             if edge_indicator is not None:
-                node_indicator = np.array([edge_indicator[edge] for edge in
-                                           processed_G.nodes()])
                 edge_indicator = original_node_indicator
             else:
-                node_indicator = None
                 edge_indicator = None
 
         if edge_indicator is not None:
-            G_sub_as_sub_graph = SubGraph(sub_graph.G_sub, None, None, None)
+            G_sub_as_sub_graph = SubGraph(sub_graph.G_sub, None)
             processed_G_sub = self.pre_process(G_sub_as_sub_graph)
-            sub_graph = SubGraph(processed_G, processed_G_sub, node_indicator, edge_indicator, is_line_graph=is_line_graph)
+            sub_graph = SubGraph(processed_G, processed_G_sub, is_line_graph=is_line_graph)
             return sub_graph
         else:
             return processed_G
