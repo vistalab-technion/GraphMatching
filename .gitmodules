@@ -1,3 +1,6 @@
 [submodule "powerful_gnns"]
 	path = powerful_gnns
 	url = git@github.com:gitplayer/powerful_gnns.git
+[submodule "bgan_pytorch"]
+	path = bgan_pytorch
+	url = git@github.com:gitplayer/bgan_pytorch.git
