@@ -69,7 +69,7 @@ def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
 
 def edge_indicator_from_node_indicator(G: nx.graph, node_indicator):
     edge_mask = [(node_indicator[list(G.nodes).index(u)] +
-                  node_indicator[list(G.nodes).index(v)] / 2.0)
+                  node_indicator[list(G.nodes).index(v)]) / 2.0
                  for u, v in G.edges()]
     w_dict = dict(zip(G.edges, edge_mask))
     return w_dict

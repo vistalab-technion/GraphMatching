@@ -52,6 +52,8 @@ class GraphProcessor(BaseGraphProcessor):
     # @staticmethod
     def binarize(self, graph: nx.graph, w: np.array, params,
                  type='top_m'):
+
+        w_th = w
         processed_graph = self.pre_process(graph)
         if type == 'k_means':
             w_th, centroids = kmeans1d.cluster(w, k=2)
@@ -131,31 +133,36 @@ class GraphProcessor(BaseGraphProcessor):
             #  and add maxium weighted edge subgraph algorithm
 
             # no need to process the graph
-            processed_graph = self.pre_process(graph)
-
-            A = (nx.adjacency_matrix(processed_graph)).toarray()
-            selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, params[
-                "num_nodes"], params["num_edges"])
+            A = (nx.adjacency_matrix(graph)).toarray()
+            # todo: (16/5/24) solve_maximum_weight_subgraph should be changed to take
+            #  into account whether w is node mask or edge mask. It will solve
+            #  different optimization problem inside.
+            selected_nodes, selected_edges = (
+                solve_maximum_weight_subgraph(weights=w,
+                                              adjacency_matrix=A,
+                                              requested_num_nodes=
+                                              params["num_nodes"],
+                                              requested_num_edges=
+                                              params["num_edges"]))
             print(f'{selected_nodes=}')
             print(f'{selected_edges=}')
             print(
                 f'requested: n_nodes = {params["num_nodes"]}, n_edges : {params["num_edges"]}')
             print(
                 f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
-            w_th = np.zeros([len(processed_graph.nodes()), 1])
-            w_th[selected_nodes] = 1.0
-        else:
-            w_th = w
 
-        w_th = w_th / w_th.sum()
 
-        if self._to_line:
-            w_th_dict = dict(zip(processed_graph.nodes(), w_th))
-        else:
-            if type != 'mwksp':
-                w_th_dict = edge_indicator_from_node_indicator(graph, w_th)
+            # w_th = np.zeros([len(processed_graph.nodes()), 1])
+            # w_th[selected_nodes] = 1.0
+
+        if type != 'mwksp':
+            w_th = w_th / w_th.sum()
+            if self._to_line:
+                w_th_dict = dict(zip(processed_graph.nodes(), w_th))
             else:
-                w_th_dict = {edge: (1 if edge in selected_edges else 0)
-                             for edge in graph.edges()}
+                w_th_dict = edge_indicator_from_node_indicator(graph, w_th)
+        else:
+            w_th_dict = {edge: (1 if edge in selected_edges else 0)
+                         for edge in graph.edges()}
 
         return w_th_dict
