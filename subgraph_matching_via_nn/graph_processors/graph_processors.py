@@ -1,5 +1,5 @@
 from logging import exception
-from typing import Optional
+from typing import Optional, Union
 
 import kmeans1d
 import networkx as nx
@@ -50,18 +50,19 @@ class GraphProcessor(BaseGraphProcessor):
             return graph
 
     # @staticmethod
-    def binarize(self, graph: nx.graph, w: np.array, params,
+    def binarize(self, graph: nx.graph, w: dict, params,
                  type='top_m'):
 
-        w_th = w
+        w_vals = np.array(w.values())
+        w_th = w_vals
         processed_graph = self.pre_process(graph)
         if type == 'k_means':
-            w_th, centroids = kmeans1d.cluster(w, k=2)
+            w_th, centroids = kmeans1d.cluster(w_vals, k=2)
             w_th = np.array(w_th)[:, None]
         elif type == 'top_m':
-            w_th = top_m(w, params["num_nodes"])
+            w_th = top_m(w_vals, params["num_nodes"])
         elif type == 'quantile':
-            w_th = (w > np.quantile(w, params["quantile_level"]))
+            w_th = (w_vals > np.quantile(w_vals, params["quantile_level"]))
             w_th = np.array(w_th, dtype=np.float64)
         elif type == 'diffusion':
             A = (nx.adjacency_matrix(processed_graph)).toarray()
@@ -81,7 +82,7 @@ class GraphProcessor(BaseGraphProcessor):
             min_t = 0.01  # Change this to your desired minimum value
             t_values = np.logspace(np.log10(max_t), np.log10(min_t), k)
 
-            w_th = w
+            w_th = w_vals
             for t in t_values:
                 # Apply the heat kernel using matrix exponentiation
                 heat_matrix = eigenvectors @ np.diag(
@@ -99,7 +100,7 @@ class GraphProcessor(BaseGraphProcessor):
             # eigenvalues, eigenvectors = np.linalg.eigh(L)
             eigenvalues, eigenvectors = sp.linalg.eigh(L, D)
 
-            w_th = w
+            w_th = w_vals
             for i in range(2, A.shape[0]):
                 # Apply the heat kernel using matrix exponentiation
                 heat_w = eigenvectors[:, :i] @ eigenvectors[:, :i].T @ w_th
@@ -111,8 +112,8 @@ class GraphProcessor(BaseGraphProcessor):
             A = (nx.adjacency_matrix(processed_graph)).toarray()
             D = np.diag(A.sum(axis=1))
             L = D - A
-            w_th = w
-            heat_w = w
+            w_th = w_vals
+            heat_w = w_vals
             for i in range(2, A.shape[0]):
                 E = graph_edit_matrix(A, 1 - params["num_nodes"] * w_th)
                 Ae = A - E
@@ -133,24 +134,22 @@ class GraphProcessor(BaseGraphProcessor):
             #  and add maxium weighted edge subgraph algorithm
 
             # no need to process the graph
-            A = (nx.adjacency_matrix(graph)).toarray()
             # todo: (16/5/24) solve_maximum_weight_subgraph should be changed to take
             #  into account whether w is node mask or edge mask. It will solve
             #  different optimization problem inside.
             selected_nodes, selected_edges = (
                 solve_maximum_weight_subgraph(weights=w,
-                                              adjacency_matrix=A,
+                                              graph=graph,
                                               requested_num_nodes=
-                                              params["num_nodes"],
+                                              params["num_nodes_orig"],
                                               requested_num_edges=
-                                              params["num_edges"]))
+                                              params["num_edges_orig"]))
             print(f'{selected_nodes=}')
             print(f'{selected_edges=}')
             print(
-                f'requested: n_nodes = {params["num_nodes"]}, n_edges : {params["num_edges"]}')
+                f'requested: n_nodes = {params["num_nodes_orig"]}, n_edges : {params["num_edges_orig"]}')
             print(
                 f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
-
 
             # w_th = np.zeros([len(processed_graph.nodes()), 1])
             # w_th[selected_nodes] = 1.0
