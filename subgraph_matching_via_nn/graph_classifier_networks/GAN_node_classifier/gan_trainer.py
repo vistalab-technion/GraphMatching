@@ -128,10 +128,10 @@ class GANTrainer:
         for i in range(num_features):
             # for j in range(3):
             param_index = i  # * 3 + j
-            sns.scatterplot(real_data[:, i].detach().cpu().numpy(), real_data[:, param_index].detach().cpu().numpy(),
+            sns.scatterplot(x=real_data[:, i].detach().cpu().numpy(), y=real_data[:, param_index].detach().cpu().numpy(),
                             label='Real Data', alpha=0.5, ax=axs[i])
-            sns.scatterplot(synthetic_data[:, i].detach().cpu().numpy(),
-                            synthetic_data[:, param_index].detach().cpu().numpy(), label='Generated Data', alpha=0.5,
+            sns.scatterplot(x=synthetic_data[:, i].detach().cpu().numpy(),
+                            y=synthetic_data[:, param_index].detach().cpu().numpy(), label='Generated Data', alpha=0.5,
                             ax=axs[i])
             axs[i].set_title(f"Parameter {param_index + 1}", fontsize=12)
             axs[i].set_xlabel(f'Real Data - {param_index + 1}')
