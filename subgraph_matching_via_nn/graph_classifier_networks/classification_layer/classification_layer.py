@@ -20,6 +20,7 @@ class IdentityClassificationLayer(BaseClassificationLayer):
         super().__init__()
 
     def forward(self, A, x):
+        x = x / x.sum()
         return x
 
 

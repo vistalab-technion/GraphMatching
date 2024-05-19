@@ -61,10 +61,12 @@ def nn_subgraph_localization(G: nx.graph,
         embeddings_full, w = composite_nn(A, x0, params)
         data_term = embedding_metric_nn(embeddings_full=embeddings_full,
                                         embeddings_subgraph=embeddings_sub)  # + regularization
-
-        reg_term = torch.stack(
-            [reg_param * reg_term(A, w, params) for reg_param, reg_term in
-             zip(params["reg_params"], params["reg_terms"])]).sum()
+        if len(params["reg_params"]) == 0 and len(params["reg_terms"]) == 0:
+            reg_term = torch.zeros(1, requires_grad=False)
+        else:
+            reg_term = torch.stack(
+                [reg_param * reg_term(A, w, params) for reg_param, reg_term in
+                 zip(params["reg_params"], params["reg_terms"])]).sum()
         loss = data_term + reg_term
         return loss, data_term, reg_term
 
