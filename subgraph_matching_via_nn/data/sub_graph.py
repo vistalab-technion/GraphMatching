@@ -21,8 +21,8 @@ class SubGraph:
         self.node_indicator = None
         self.edge_indicator = None
         if G_sub is not None:
-            self.node_indicator = get_node_indicator(G=G, G_sub=G_sub)
-            self.edge_indicator = get_edge_indicator(G=G, G_sub=G_sub)
+            self.node_indicator = get_node_indicator(G=G, G_sub=G_sub) # For the same nx.Graph, the nodes order are maintained
+            self.edge_indicator = get_edge_indicator(G=G, G_sub=G_sub) # For the same nx.Graph, the edges mapping is the same
         self.is_line_graph = is_line_graph
 
         self.device = device
