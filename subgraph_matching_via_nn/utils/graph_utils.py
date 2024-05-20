@@ -37,15 +37,8 @@ def get_edge_indicator(G: nx.graph, G_sub: nx.graph):
 
     edge_indicator = \
         {(u, v): 1 if (u, v) in G_sub.edges() else 0 for (u, v) in G.edges()}
-    # Create symmetric adjacency matrix
-    num_nodes = 1 + max(G.nodes())
-    adj_matrix = np.zeros((num_nodes, num_nodes))
 
-    for (i, j), val in edge_indicator.items():
-        adj_matrix[i][j] = val
-        adj_matrix[j][i] = val  # Ensure it's symmetric
-
-    return edge_indicator, adj_matrix
+    return edge_indicator
 
 
 def node_indicator_from_edge_indicator(G: nx.graph, edge_indicator):
