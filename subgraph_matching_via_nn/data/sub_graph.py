@@ -22,7 +22,7 @@ class SubGraph:
         self.edge_indicator = None
         if G_sub is not None:
             self.node_indicator = get_node_indicator(G=G, G_sub=G_sub)
-            self.edge_indicator, _ = get_edge_indicator(G=G, G_sub=G_sub)
+            self.edge_indicator = get_edge_indicator(G=G, G_sub=G_sub)
         self.is_line_graph = is_line_graph
 
         self.device = device
