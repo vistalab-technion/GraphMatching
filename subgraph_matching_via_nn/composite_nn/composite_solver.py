@@ -42,9 +42,8 @@ class PickleSupportedCompositeSolver(nn.Module):
 
     def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
         # preprocess the graphs, e.g. to get a line-graph
-        G = self.graph_processor.pre_process(SubGraph(G))
-        G_sub = self.graph_processor.pre_process(SubGraph(G_sub))
-        sub_graph = SubGraph(G, G_sub)
+        sub_graph = self.graph_processor.pre_process(SubGraph(G, G_sub))
+
         A = sub_graph.A_full
         A_sub = sub_graph.A_sub
 
