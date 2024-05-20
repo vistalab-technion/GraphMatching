@@ -42,10 +42,16 @@ class SubGraph:
 
     @property
     def A_full(self):
+        """
+        The order of the adjacency matrix nodes is guaranteed to be the same as the graph nodes order
+        """
         return get_graph_adj_mat_as_tensor(self.G).to(device=self.device)
 
     @property
     def A_sub(self):
+        """
+        The order of the adjacency matrix nodes is guaranteed to be the same as the graph nodes order
+        """
         return get_graph_adj_mat_as_tensor(self.G_sub).to(device=self.device)
 
     @property

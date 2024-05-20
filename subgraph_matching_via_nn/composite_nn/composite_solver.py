@@ -14,6 +14,19 @@ from subgraph_matching_via_nn.mask_binarization.indicator_dsitribution_binarizer
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE, uniform_dist
 
 
+"""
+When solving the subgraph matching problem, we are comparing the embedding of a full graph alongside a mask on its nodes,
+ against a subgraph (with the uniform mask).
+For the embedding evaluation, we are forming an instance of a <g, w> pair, where g is the graph and w is its node mask. 
+The invariant which must hold for this pair, is that each index of an entry in the mask, matches the graph node index. 
+This invariant holds due to the following two invariants:
+1. g's nodes order dictates the order of the adjacency matrix nodes [see the <SubGraph> class to see how the adjacency
+ matrix is produced from g]
+2. The adjacency matrix nodes order corresponds to w's node entries indices
+ [holds as long the mask entries order is not manipulated after generating the initial mask]
+"""
+
+
 class PickleSupportedCompositeSolver(nn.Module):
     def __init__(self, composite_nn: CompositeNeuralNetwork, embedding_metric_nn: EmbeddingMetricNetwork,
                  graph_processor: Optional[BaseGraphProcessor], params: dict):
