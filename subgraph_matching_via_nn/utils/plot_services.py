@@ -41,13 +41,20 @@ class PlotServices:
 
         axes_counter = 0
         for indicator_name, indicator_obj in indicator_name_to_object_map.items():
-            indicator_obj = indicator_obj if to_line else np.array(list(indicator_obj.values()))
+            indicator_obj = self.get_w_indicator_from_w_indicator_dict(indicator_obj, to_line)
             plot_graph_with_colors(G=G, distribution=indicator_obj,
                                    title=indicator_name,
                                    ax=axes[axes_counter], seed=self.seed)
             axes_counter += 1
 
         plt.show()
+
+    def get_w_indicator_from_w_indicator_dict(self, w_dict, to_line):
+        if to_line:
+            return w_dict
+        else:
+            sorted_dict_items = sorted(w_dict.items(), reverse=False, key=lambda item: item[0])
+            return np.array([sorted_dict_item[1] for sorted_dict_item in sorted_dict_items])
 
     def plot_subgraph_gt_vs_initial_indicators(self, sub_graph: SubGraph, processed_sub_graph: SubGraph, w_init, gt_indicator):
         G = sub_graph.G
@@ -56,7 +63,7 @@ class PlotServices:
         fig, axes = plt.subplots(1, 2, figsize=[18, 4])
 
         to_line = processed_sub_graph.is_line_graph
-        w_init_indicator = w_init_dict if to_line else np.array(list(w_init_dict.values()))
+        w_init_indicator = self.get_w_indicator_from_w_indicator_dict(w_init_dict, to_line)
 
         plot_graph_with_colors(G=G, title='gt', distribution=gt_indicator, ax=axes[0], seed=self.seed)
         plot_graph_with_colors(G=G, title='w_init', distribution=w_init_indicator, ax=axes[1], seed=self.seed)
