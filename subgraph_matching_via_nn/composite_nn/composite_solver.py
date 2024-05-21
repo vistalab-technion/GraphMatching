@@ -252,14 +252,14 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         #TODO: optimize with batching
         graphs_distances_list = []
         for G, G_sub in input_graphs:
-            graphs_distance = self.get_loss_for_graph_and_subgraph(G, G_sub)
+            graphs_distance, _ = self.get_loss_and_mask_for_graph_and_subgraph(G, G_sub)
             graphs_distances_list.append(graphs_distance)
         return torch.stack(graphs_distances_list).unsqueeze(1)
 
-    def get_loss_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
+    def get_loss_and_mask_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
         A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
-        loss, reg, _ = self.get_composite_loss_terms(A, embeddings_sub)
-        return loss + reg
+        loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub)
+        return loss + reg, w
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
         max_grad_norm = self.params['max_grad_norm']
