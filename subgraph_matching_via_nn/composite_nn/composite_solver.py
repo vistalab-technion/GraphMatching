@@ -10,7 +10,6 @@ from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import BaseGraphEmbeddingNetwork
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import BaseGraphProcessor, GraphProcessor
-from subgraph_matching_via_nn.mask_binarization.indicator_dsitribution_binarizer import IndicatorDistributionBinarizer
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE, uniform_dist
 
 
@@ -260,6 +259,16 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
         loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub)
         return loss + reg, w
+
+    def init_mask_and_solve_one_round(self, sub_graph, original_reference_subgraph):
+        # _ = self.composite_nn.init_network_with_indicator(processed_sub_graph) #reference_subgraph
+        self.composite_nn.node_classifier_network.init_params(default_weights=None)  # TODO
+
+        w_star = self.solve(G=sub_graph.G,
+                                        G_sub=original_reference_subgraph, dtype=TORCH_DTYPE)
+
+        # x0 = self.set_initial_params_based_on_previous_optimum(w_star) #TODO
+        return w_star
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
         max_grad_norm = self.params['max_grad_norm']

@@ -32,7 +32,10 @@ class CompositeNeuralNetwork(nn.Module):
         self.embedding_networks = embedding_networks
         self.quantize_layer = QuantizeLayer()
 
-        self.last_w = None
+        self.ignored_w_indices_list = []
+
+    def ignore_w_indices(self, ignored_w_indices_list):
+        self.ignored_w_indices_list = ignored_w_indices_list
 
     def forward(self, A, x=None, params: dict = None, is_use_last_args: bool = False):
         # compute node classifier
@@ -60,6 +63,10 @@ class CompositeNeuralNetwork(nn.Module):
         w = self.node_classifier_network(A=A, x=x, params=params)
         if params.get('apply_quantization', None):
             w = self.quantize_layer(w)
+
+        for ignored_w_index in self.ignored_w_indices_list:
+            w[ignored_w_index] = 1 / params["m"]
+
         return w
 
     def init_params(self, **kwargs):

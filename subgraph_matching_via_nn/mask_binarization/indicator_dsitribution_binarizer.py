@@ -1,12 +1,17 @@
+import os
 from enum import Enum
 import kmeans1d
 import networkx as nx
 import numpy as np
 import scipy as sp
+import torch
 
+from subgraph_matching_via_nn.composite_nn.composite_solver import BaseCompositeSolver
+from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.evaluation.mask_evaluation import evaluate_mask_performance
 from subgraph_matching_via_nn.mask_binarization.LP_binarization import solve_maximum_weight_subgraph
 from subgraph_matching_via_nn.utils.graph_utils import graph_edit_matrix
-from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m
+from subgraph_matching_via_nn.utils.utils import NP_DTYPE, top_m, TORCH_DTYPE
 
 
 class IndicatorBinarizationBootType(Enum):
@@ -23,9 +28,92 @@ class IndicatorBinarizationType(Enum):
     zoomout = 4,
     nonlinear_zoomout = 5,
     mwksp = 6,
+    greedy_stepwise_mwksp = 7,
 
 
 class IndicatorDistributionBinarizer:
+
+    @staticmethod
+    def get_most_prominent_mask_node(w_star, chosen_nodes_indices, composite_solver,
+                                     processed_sub_graph, reference_subgraph, use_magnitude: bool):
+        # decide on the most prominent mask node entry (according to grad/how binary it is/magnitude)
+        w_star_copy = np.copy(w_star)
+
+        if use_magnitude:
+            # don't take into account already chosen nodes
+            for mask_node_index, _ in enumerate(w_star):
+                if mask_node_index in chosen_nodes_indices:
+                    w_star_copy[mask_node_index] = float("-inf")
+
+            chosen_subgraph_node_index = np.argmax(w_star_copy.reshape(-1))
+            return chosen_subgraph_node_index
+
+        w_star_copy = torch.tensor(w_star, requires_grad=True)
+        updated_w_star_loss = composite_solver.solve_using_external_params(w_star_copy, processed_sub_graph.A_full,
+                                                                           SubGraph(reference_subgraph).A_full,
+                                                                           embedding_networks=composite_solver.composite_nn.embedding_networks,
+                                                                           dtype=TORCH_DTYPE)
+
+        w_mask_grad = torch.autograd.grad(updated_w_star_loss, w_star_copy, retain_graph=True, create_graph=True,
+                                          allow_unused=True)[0]
+
+        # don't take into account already chosen nodes
+        for mask_node_index in range(len(w_mask_grad)):
+            if mask_node_index in chosen_nodes_indices:
+                w_mask_grad[mask_node_index] = float("inf")
+        chosen_subgraph_node_index = torch.argmin(w_mask_grad.reshape(-1)).item()
+
+        return chosen_subgraph_node_index
+
+    @staticmethod
+    # TODO: this code should align with the binarization API we have, refactor in the future
+    def greedy_stepwise_binarization(composite_solver: BaseCompositeSolver, sub_graph: SubGraph,
+                                     processed_sub_graph: SubGraph, reference_subgraph: nx.Graph,
+                                     original_reference_subgraph: nx.Graph,
+                                     init_w_star: np.ndarray, use_magnitude: bool):
+        # The first inference iteration for the current trial produced @init_w_star
+
+        w_star = init_w_star
+        current_binarized_mask = np.zeros(init_w_star.shape)
+
+        num_steps = len(processed_sub_graph.G_sub.nodes)
+        chosen_nodes_indices = []
+        for step_number in range(num_steps):
+
+            chosen_subgraph_node_index = \
+                IndicatorDistributionBinarizer.get_most_prominent_mask_node(w_star, chosen_nodes_indices,
+                                                                            composite_solver, processed_sub_graph,
+                                                                            reference_subgraph,
+                                                                            use_magnitude=use_magnitude)
+
+            chosen_nodes_indices.append(chosen_subgraph_node_index)
+            current_binarized_mask[chosen_subgraph_node_index] = 1
+            print(f"Node #{step_number + 1} out of {num_steps}, was chosen during greedy binarization.{os.linesep}"
+                  f"Current mask is: {current_binarized_mask}.{os.sep}Order of selected nodes is {chosen_nodes_indices}")
+
+            # logging
+            with open("localization cell output.txt", "a") as myfile:
+                myfile.write(f"Ref subgraph:{os.linesep}"
+                             f"w_star={w_star}{os.linesep}current w_rounded={current_binarized_mask}{os.linesep}")
+                if step_number == num_steps - 1:
+                    myfile.write(f"{evaluate_mask_performance(current_binarized_mask, processed_sub_graph.w_gt)}{os.linesep}")
+                    break
+
+            # Fix the chosen node mask entry (set the mask entry to 1 regardless to the following mask training iterations)
+            composite_solver.composite_nn.ignore_w_indices(chosen_nodes_indices)
+
+            # solve the localization loop
+            w_star = composite_solver.init_mask_and_solve_one_round(sub_graph, original_reference_subgraph)
+
+            # check for convergence
+            if w_star is None:
+                # no localization
+                current_binarized_mask = None
+                break
+
+        composite_solver.composite_nn.ignore_w_indices([])  # restore state of solver
+
+        return current_binarized_mask
 
     @staticmethod
     def binarize(graph: nx.graph, w: np.array, params, type: IndicatorBinarizationType, as_dict:bool=True):
