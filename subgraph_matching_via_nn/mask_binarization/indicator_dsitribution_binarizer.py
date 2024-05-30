@@ -116,7 +116,7 @@ class IndicatorDistributionBinarizer:
         return current_binarized_mask
 
     @staticmethod
-    def binarize(graph: nx.graph, w: np.array, params, type: IndicatorBinarizationType, as_dict:bool=True):
+    def binarize(original_graph: nx.graph, processed_graph: nx.graph, w: np.array, params, type: IndicatorBinarizationType, as_dict:bool=True):
         if type == IndicatorBinarizationType.KMeans:
             w_th, centroids = kmeans1d.cluster(w, k=2)
             w_th = np.array(w_th)[:, None]
@@ -126,7 +126,7 @@ class IndicatorDistributionBinarizer:
             w_th = (w > np.quantile(w, params["quantile_level"]))
             w_th = np.array(w_th, dtype=np.float64)
         elif type == IndicatorBinarizationType.Diffusion:
-            A = (nx.adjacency_matrix(graph)).toarray()
+            A = (nx.adjacency_matrix(processed_graph)).toarray()
             D = np.diag(A.sum(axis=1))
             L = D - A
             # # Eigenvalue decomposition of the Laplacian
@@ -153,7 +153,7 @@ class IndicatorDistributionBinarizer:
                 # Binarize by keeping the largest m components
                 w_th = top_m(heat_w, params["m"])
         elif type == IndicatorBinarizationType.zoomout:
-            A = (nx.adjacency_matrix(graph)).toarray()
+            A = (nx.adjacency_matrix(processed_graph)).toarray()
             D = np.diag(A.sum(axis=1))
             L = D - A
 
@@ -170,7 +170,7 @@ class IndicatorDistributionBinarizer:
                 w_th = top_m(heat_w, params["m"])
 
         elif type == IndicatorBinarizationType.nonlinear_zoomout:
-            A = (nx.adjacency_matrix(graph)).toarray()
+            A = (nx.adjacency_matrix(processed_graph)).toarray()
             D = np.diag(A.sum(axis=1))
             L = D - A
             w_th = w
@@ -194,11 +194,21 @@ class IndicatorDistributionBinarizer:
             num_nodes = params['m']
             num_edges = params['n']
 
-            A = (nx.adjacency_matrix(graph)).toarray()
+            A = (nx.adjacency_matrix(original_graph)).toarray()
+
             selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, num_nodes, num_edges)
             print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
             print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
-            w_th = np.zeros([len(graph.nodes()), 1])
+
+            # convert resulting mask W to the format the processed graph is working with (in terms of line graph format)
+            is_working_on_node_mask = (len(w) == A.shape[0])
+            if is_working_on_node_mask:
+                pass
+            else:
+                # if working on a line graph, convert the result edges mask to the node mask we are working on
+                selected_nodes = selected_edges
+
+            w_th = np.zeros([len(processed_graph.nodes()), 1])
             w_th[selected_nodes] = 1.0
         else:
             w_th = w
@@ -206,25 +216,25 @@ class IndicatorDistributionBinarizer:
         w_th = w_th / w_th.sum()
 
         if as_dict:
-            return dict(zip(graph.nodes(), w_th))
+            return dict(zip(processed_graph.nodes(), w_th))
         return w_th
 
     @staticmethod
-    def from_indicators_series_to_binary_indicator(processed_G, w_all, w_star, params,
+    def from_indicators_series_to_binary_indicator(original_G, processed_G, w_all, w_star, params,
                                                    series_binarization_type: IndicatorBinarizationBootType,
                                                    element_binarization_type: IndicatorBinarizationType):
 
         binarize = IndicatorDistributionBinarizer.binarize
 
         if series_binarization_type == IndicatorBinarizationBootType.OptimalElement:
-            return binarize(processed_G, w_star, params, element_binarization_type)
+            return binarize(original_G, processed_G, w_star, params, element_binarization_type)
         elif series_binarization_type == IndicatorBinarizationBootType.SeriesNormalizedMean:
             w_boot = np.mean(np.array(w_all), axis=0)
-            w_boot = binarize(processed_G, w_boot, params, None, as_dict=False)
-            return binarize(processed_G, w_boot, params, element_binarization_type)
+            w_boot = binarize(original_G, processed_G, w_boot, params, None, as_dict=False)
+            return binarize(original_G, processed_G, w_boot, params, element_binarization_type)
         elif series_binarization_type == IndicatorBinarizationBootType.SeriesMedianOfBinarizedElements:
-            return binarize(processed_G, np.median(
-                np.array([list(binarize(processed_G, w, params, element_binarization_type).values()) for w in w_all]), axis=0),
+            return binarize(original_G, processed_G, np.median(
+                np.array([list(binarize(original_G, processed_G, w, params, element_binarization_type).values()) for w in w_all]), axis=0),
                             params, element_binarization_type)
         else:
             raise ValueError(f"Unsupported series binarization type: {series_binarization_type}")

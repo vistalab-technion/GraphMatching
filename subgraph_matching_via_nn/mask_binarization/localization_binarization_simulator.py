@@ -201,7 +201,7 @@ class LocalizationBinarizationSimulator:
         w_star = solver.composite_nn.node_classifier_network(A = processed_sub_graph.A_full, params = params).detach().cpu().numpy()
         w_star_dict = dict(zip(processed_G.nodes(), w_star))
 
-        w_bin_dict = IndicatorDistributionBinarizer.from_indicators_series_to_binary_indicator(processed_G, w_all, w_star, params, series_binarization_type, element_binarization_type)
+        w_bin_dict = IndicatorDistributionBinarizer.from_indicators_series_to_binary_indicator(sub_graph.G, processed_G, w_all, w_star, params, series_binarization_type, element_binarization_type)
         return {"w_star": w_star_dict, "binarized" : w_bin_dict}
 
     @staticmethod

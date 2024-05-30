@@ -301,7 +301,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         return w_star
 
     def set_initial_params_based_on_previous_optimum(self, w_star):
-        # binarized_w_star = IndicatorDistributionBinarizer.binarize(processed_G, w_star, self.params,
+        # binarized_w_star = IndicatorDistributionBinarizer.binarize(original_G, processed_G, w_star, self.params,
         #                                  binarization_type)
         # w_th = torch.tensor(list(binarized_w_star.values()), device=device)
 
