@@ -50,6 +50,9 @@ class PickleSupportedCompositeSolver(nn.Module):
         embeddings_full, w = self.composite_nn(A, x0, self.params, is_use_last_args=is_use_last_args)
 
         loss, reg = self.__get_loss_given_embeddings_and_adj_matrix(embeddings_full, embeddings_sub, A, w)
+
+        loss = loss * self.params['scaler']
+
         return loss, reg, w
 
     def __pre_process_graphs(self, G: nx.graph, G_sub: nx.graph):
@@ -282,9 +285,6 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                 is_use_last_args = (iteration > 0)
 
                 loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
-
-                loss = loss * self.params['scaler']
-
                 full_loss = loss + reg
 
                 optimizer.zero_grad()
