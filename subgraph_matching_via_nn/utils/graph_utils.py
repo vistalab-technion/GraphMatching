@@ -1,3 +1,4 @@
+from typing import Dict, Tuple
 import torch
 from torch import diag, tensor
 import networkx as nx
@@ -97,3 +98,62 @@ def hamiltonian(A, v, diagonal_scale):
     E = graph_edit_matrix(A, v)
     H = laplacian(A - E) + diagonal_scale * diag(v.squeeze())
     return H
+
+def adjacency_matrix_to_edges(adjacency_matrix):
+    num_nodes = adjacency_matrix.shape[0]
+    edges = []
+    for i in range(num_nodes):
+        for j in range(i+1, num_nodes):
+            if adjacency_matrix[i][j] == 1:
+                edges.append((i, j))
+    return edges
+
+def total_edges_between_nodes_of_degrees(edge_weight_matrix, in_degrees, degree_i, degree_j):
+    nodes_of_degree_i = np.argwhere(in_degrees==degree_i)
+    nodes_of_degree_j = np.argwhere(in_degrees==degree_j)
+    if len(nodes_of_degree_i) == 0:
+        return 0
+    if len(nodes_of_degree_j) == 0:
+        return 0
+
+    matched_edges_weights = edge_weight_matrix[nodes_of_degree_i].T[nodes_of_degree_j]
+
+    if len(matched_edges_weights) == 0:
+        return 0
+
+    return matched_edges_weights.sum()
+
+def joint_degree_matrix(A, edge_weight_matrix=None):
+    if edge_weight_matrix is None:
+        edge_weight_matrix = A
+    else:
+        edge_weight_matrix = edge_weight_matrix * A # zero out entries of edges not in A
+
+    # out_degrees = np.sum(A, axis=1).reshape(-1)
+    in_degrees = np.sum(A, axis=0).reshape(-1)
+
+    n = A.shape[0]
+
+    output_matrix = np.array([
+        np.array([total_edges_between_nodes_of_degrees(edge_weight_matrix, in_degrees, degree_i, degree_j) for degree_j in range(n)])
+        for degree_i in range(n)
+
+    ])
+
+    return output_matrix
+
+
+def create_weighted_adjacency_matrix_from_edge_mask(edge_mask: Dict[Tuple[int, int], float], num_nodes):
+    adjacency_matrix = np.zeros((num_nodes, num_nodes), dtype=float)
+    for edge, mask_val in edge_mask.items():
+        source, target = edge
+        adjacency_matrix[source][target] = adjacency_matrix[target][source] = mask_val
+    return adjacency_matrix
+
+
+def create_weighted_adjacency_matrix_from_node_mask(node_mask: Dict[int, float], num_nodes):
+    adjacency_matrix = np.zeros((num_nodes, num_nodes), dtype=float)
+    for node, mask_val in node_mask.items():
+        adjacency_matrix[node, :] = mask_val * np.ones(num_nodes)
+        adjacency_matrix[:, node] = mask_val * np.ones(num_nodes)
+    return adjacency_matrix
