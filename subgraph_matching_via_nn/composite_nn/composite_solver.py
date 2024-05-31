@@ -5,8 +5,11 @@ import numpy as np
 import torch
 from torch import optim, nn
 from livelossplot import PlotLosses
+
+from optimization.algs.frank_wolfe_optimizer import IdentityNodeClassifierLPFrankWolfeOptimizer, DeepNodeClassifierLPFrankWolfeOptimizer
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_network_factory import NodeClassifierNetworkType
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import BaseGraphEmbeddingNetwork
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_processors.graph_processors import BaseGraphProcessor, GraphProcessor
@@ -44,6 +47,13 @@ class PickleSupportedCompositeSolver(nn.Module):
         if len(reg_terms_list) == 0:
             return 0
         return torch.stack(reg_terms_list).sum()
+
+    def get_output_mask(self, A):
+        params = self.params
+        x0 = params.get("x0", None)
+        w = self.composite_nn.classify(A=A, x=x0, params=params)
+
+        return w
 
     def get_composite_loss_terms(self, A, embeddings_sub, is_use_last_args=False):
         x0 = self.params.get("x0", None)
@@ -227,7 +237,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
     def __get_model_params(self):
         return list(self.composite_nn.parameters())
 
-    def _create_optimizer(self):
+    def _create_optimizer(self, original_graph: nx.Graph, processed_graph: nx.Graph, processed_graph_matrix: torch.Tensor,
+                          original_reference_subgraph: nx.Graph, is_working_on_node_mask: bool):
         lr = self.params['lr']
         solver_type = self.params.get("solver_type", None)
         model_params = self.__get_model_params()
@@ -243,6 +254,28 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         elif solver_type == 'adam':
             weight_decay = self.params['weight_decay']
             optimizer = optim.Adam(model_params, lr=lr, weight_decay=weight_decay)
+        elif solver_type == 'FW':
+            gradient_average_iterations_amount = self.params.get("gradient_average_iterations_amount", 1)
+
+            acquire_mask_gradients_lambda = lambda: self.get_mask_grad_array(original_graph, processed_graph,
+                                                                             original_reference_subgraph)
+            node_classifier_network_type = self.params['node_classifier_network_type']
+            if node_classifier_network_type == NodeClassifierNetworkType.Identity:
+                optimizer = IdentityNodeClassifierLPFrankWolfeOptimizer(params=model_params, num_nodes=self.params['m'], num_edges=self.params['n'],
+                                                gradient_average_iterations_amount=gradient_average_iterations_amount,
+                                                is_working_on_node_mask=is_working_on_node_mask,
+                                                original_graph=original_graph, processed_graph=processed_graph,
+                                                acquire_mask_gradients_lambda=acquire_mask_gradients_lambda)
+            elif node_classifier_network_type == NodeClassifierNetworkType.NN:
+                get_output_mask_lambda = lambda: self.get_output_mask(processed_graph_matrix)
+                optimizer = DeepNodeClassifierLPFrankWolfeOptimizer(params=model_params, num_nodes=self.params['m'],
+                                                                    num_edges=self.params['n'],
+                                                                    gradient_average_iterations_amount=gradient_average_iterations_amount,
+                                                                    is_working_on_node_mask=is_working_on_node_mask,
+                                                                    original_graph=original_graph,
+                                                                    processed_graph=processed_graph,
+                                                                    acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
+                                                                    get_output_mask=get_output_mask_lambda)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
         return optimizer, model_params
@@ -273,15 +306,36 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         # x0 = self.set_initial_params_based_on_previous_optimum(w_star) #TODO
         return w_star
 
+    def get_mask_grad_array(self, original_graph: nx.Graph, processed_graph: nx.Graph,
+                            original_reference_subgraph: nx.Graph):
+        loss_val, w_mask = self.get_loss_and_mask_for_graph_and_subgraph(G=original_graph,
+                                                                         G_sub=original_reference_subgraph)
+
+        w_mask_grad = torch.autograd.grad(loss_val, w_mask,
+                                          allow_unused=True)[0]
+
+        w_mask_node_grads = [
+            w_mask_grad[processed_g_node_index].item()
+            for processed_g_node_index, processed_g_node in enumerate(processed_graph.nodes)
+        ]
+
+        return w_mask_node_grads
+
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
         max_grad_norm = self.params['max_grad_norm']
         A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
 
         self.composite_nn.train() # Set the model to training mode
-        optimizer, model_params = self._create_optimizer()
+
+        sub_graph = self.graph_processor.pre_process(SubGraph(G, G_sub))
+        optimizer, model_params = self._create_optimizer(original_graph=G,
+                                                         processed_graph=sub_graph.G,
+                                                         processed_graph_matrix=A,
+                                                         original_reference_subgraph=G_sub,
+                                                         is_working_on_node_mask=not sub_graph.is_line_graph)
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
-            def closure():
+            def closure(is_log=True):
                 is_use_last_args = (iteration > 0)
 
                 loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
@@ -291,7 +345,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                 full_loss.backward()
                 torch.nn.utils.clip_grad_norm_(model_params, max_grad_norm)
 
-                self.__log_loss(iteration, loss, reg, w)
+                if is_log:
+                    self.__log_loss(iteration, loss, reg, w)
 
                 return full_loss
 
