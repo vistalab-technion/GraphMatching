@@ -26,7 +26,10 @@ class BaseFrankWolfeOptimizer(SGD, ABC):
                 # apply closure multiple times
                 for closure_iter in range(gradient_average_iterations_amount):
                     # this performs a single gradient step
-                    super().step(closure=lambda :closure(is_log=False))
+                    super().step(
+                        closure=lambda:
+                        closure(inner_optimizer_iteration=closure_iter, is_log=False, is_calc_grad=True)
+                    )
 
     @abstractmethod
     def _get_grads_as_dict(self) -> Dict:
@@ -55,6 +58,10 @@ class BaseFrankWolfeOptimizer(SGD, ABC):
 
         # change param values according to resulting mask
         self._update_model_params_to_match_mask(w_th, closure)
+        print("finished _update_model_params_to_match_mask")
+
+        #log loss
+        _ = closure(inner_optimizer_iteration=None, is_log=True, is_calc_grad=False)
 
 
 class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
@@ -90,8 +97,8 @@ class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
         num_edges = self.num_edges
 
         selected_nodes, selected_edges = solve_maximum_weight_subgraph(grads_dict, self.original_graph, num_nodes, num_edges)
-        print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
-        print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
+        # print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
+        # print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
         # print(selected_edges)
 
         # convert resulting mask W to the format the processed graph is working with (in terms of line graph format)
@@ -121,7 +128,7 @@ class IdentityNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
     @override
     def _update_model_params_to_match_mask(self, w_mask, closure):
         # calculate grad
-        _ = closure()
+        _ = closure(is_log=False, is_calc_grad=True)
 
         mask_tensor = self.param_groups[0]['params'][0]
         mask_grad = mask_tensor.grad
@@ -134,7 +141,7 @@ class IdentityNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
 
 class DeepNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
 
-    INVERSE_MASK_SGD_ITER_AMOUNT = 100
+    INVERSE_MASK_SGD_ITER_AMOUNT = 20
 
     def __init__(self, params: ParamsT, is_working_on_node_mask: bool, num_nodes: int, num_edges: int,
                  original_graph: nx.Graph, processed_graph: nx.Graph,
@@ -175,6 +182,7 @@ class DeepNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
             loss.backward()
             optimizer.step()
 
-            # Print progress
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item():.4f}')
+            # # Print progress
+            # if (epoch + 1) % 10 == 0:
+            #     print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item():.4f}')
+            # print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item():.4f}')

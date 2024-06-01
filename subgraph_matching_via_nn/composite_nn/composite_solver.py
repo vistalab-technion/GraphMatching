@@ -335,22 +335,31 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                                          is_working_on_node_mask=not sub_graph.is_line_graph)
 
         for iteration in range(self.params["maxiter"]):  # TODO: add stopping condition
-            def closure(is_log=True):
-                is_use_last_args = (iteration > 0)
+
+            def closure(optimization_loop_iteration, inner_optimizer_iteration, is_log, is_calc_grad):
+                is_use_last_args = (optimization_loop_iteration > 0)
+                if inner_optimizer_iteration is not None:
+                    is_use_last_args = is_use_last_args or (inner_optimizer_iteration > 0)
 
                 loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
                 full_loss = loss + reg
 
-                optimizer.zero_grad()
-                full_loss.backward()
-                torch.nn.utils.clip_grad_norm_(model_params, max_grad_norm)
+                if is_calc_grad:
+                    optimizer.zero_grad()
+                    full_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model_params, max_grad_norm)
 
                 if is_log:
-                    self.__log_loss(iteration, loss, reg, w)
+                    self.__log_loss(optimization_loop_iteration, loss, reg, w)
 
                 return full_loss
 
-            optimizer.step(closure)
+            optimizer.step(
+                lambda inner_optimizer_iteration=None, is_log=True, is_calc_grad=True:
+                           closure(optimization_loop_iteration=iteration,
+                                   inner_optimizer_iteration=inner_optimizer_iteration,
+                                   is_log=is_log, is_calc_grad=is_calc_grad)
+                           )
 
         w_star = self.composite_nn.classify(A=A, params=self.params).detach().cpu().numpy()
         return w_star
