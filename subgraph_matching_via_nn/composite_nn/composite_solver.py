@@ -136,6 +136,26 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
             print(
                 f"{[value for value in indicator_embedding]} : {indicator_name} {embedding_nn.embedding_type}")
 
+    def compare_gt_graph_mask_embedding_to_gt_subgraph_embedding(self, processed_sub_graph: SubGraph,
+                                                                 A_sub_indicator=None):
+        device = self.params['device']
+        A_full_processed = processed_sub_graph.A_full
+        A_sub_processed = processed_sub_graph.A_sub
+
+        gt_indicator_tensor = processed_sub_graph.w_gt
+
+        if A_sub_indicator is None:
+            A_sub_indicator = uniform_dist(A_sub_processed.shape[0]).detach()
+        A_sub_indicator = A_sub_indicator.to(device=device)
+
+        embeddings_gt = self.composite_nn.embed(A=A_full_processed.detach().type(TORCH_DTYPE),
+                                                w=gt_indicator_tensor)
+        embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
+                                                 w=A_sub_indicator)
+        ref_loss = self.embedding_metric_nn(embeddings_gt, embeddings_sub)
+
+        return ref_loss
+
     def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
         device = self.params['device']
         if A_sub_indicator is None:
