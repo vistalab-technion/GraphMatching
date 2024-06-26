@@ -96,6 +96,7 @@ class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
         num_nodes = self.num_nodes
         num_edges = self.num_edges
 
+        grads_dict = {k: -v for k, v in grads_dict.items()}
         selected_nodes, selected_edges = solve_maximum_weight_subgraph(grads_dict, self.original_graph, num_nodes, num_edges)
         # print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
         # print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
