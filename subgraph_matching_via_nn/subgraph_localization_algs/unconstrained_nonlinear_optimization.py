@@ -41,6 +41,10 @@ def binary_penalty(A, w, params):
     return reg
 
 
+def negative_l2_norm_squared(A, w, params):
+    return -torch.pow(torch.linalg.norm(w, dim=0, ord=2), 2)
+
+
 def log_barrier_penalty(A, w, params):
     v = 1 - w * (params["m"])
     evals, evecs = torch.linalg.eigh(hamiltonian(A, v, params["diagonal_scale"]))

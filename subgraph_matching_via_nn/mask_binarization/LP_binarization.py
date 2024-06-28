@@ -3,10 +3,16 @@ import pulp
 from pulp import PULP_CBC_CMD
 
 
+class LPBinarizationProblemType:
+    Continuous=1,
+    Binary=2,
+
+
 def solve_maximum_weight_subgraph(weights : dict,
                                   graph: nx.Graph,
                                   requested_num_nodes,
-                                  requested_num_edges):
+                                  requested_num_edges,
+                                  problem_type: LPBinarizationProblemType = LPBinarizationProblemType.Binary):
     """
     Solves a maximum weighted subgraph problem. If 'weights' is a node weights vector (i.e.,
     it of size [nodes x 1]), then it solves:
@@ -56,8 +62,18 @@ def solve_maximum_weight_subgraph(weights : dict,
     adjacency_matrix = (nx.adjacency_matrix(graph)).toarray()
     num_nodes = len(graph.nodes)
     num_edges = len(graph.edges)
-    x = [pulp.LpVariable(f"x{i}", cat=pulp.LpBinary) for i in range(num_nodes)]
-    y = {(i, j): pulp.LpVariable(f"y{i}_{j}", cat=pulp.LpBinary) for i in
+
+    category: LPBinarizationProblemType
+
+    if problem_type == LPBinarizationProblemType.Binary:
+        category = pulp.LpBinary
+    elif problem_type == LPBinarizationProblemType.Continuous:
+        category = pulp.LpContinuous
+    else:
+        raise NotImplementedError(f"LP problem type not supported: {problem_type}")
+
+    x = [pulp.LpVariable(f"x{i}", cat=category) for i in range(num_nodes)]
+    y = {(i, j): pulp.LpVariable(f"y{i}_{j}", cat=category) for i in
          range(num_nodes) for j in range(i + 1, num_nodes)}
 
     # Objective function
@@ -87,9 +103,15 @@ def solve_maximum_weight_subgraph(weights : dict,
     problem.solve(PULP_CBC_CMD(msg=0))
 
     # Extract the solution
-    selected_nodes = [i for i in range(num_nodes) if pulp.value(x[i]) == 1]
-    selected_edges = [(i, j) for i in range(num_nodes) for j in range(i + 1, num_nodes)
-                      if pulp.value(y[(i, j)]) == 1]
+    if problem_type == LPBinarizationProblemType.Binary:
+        selected_nodes_dict = {i: 1 for i in range(num_nodes) if pulp.value(x[i]) == 1}
+        selected_edges_dict = {(i, j): 1 for i in range(num_nodes) for j in range(i + 1, num_nodes)
+                          if pulp.value(y[(i, j)]) == 1}
+    else:
+        selected_nodes_dict = {i: pulp.value(x[i]) for i in range(num_nodes)}
+        # no need to take into account edges which don't exist in the first place!
+        selected_edges_dict = {(i, j): pulp.value(y[(i, j)]) for i in range(num_nodes) for j in range(i + 1, num_nodes)
+                          if adjacency_matrix[i][j] != 0}
 
-    # Return the selected nodes and edges
-    return selected_nodes, selected_edges
+    # Return the selected nodes and edges mapping
+    return selected_nodes_dict, selected_edges_dict

@@ -6,6 +6,8 @@ import torch
 from torch import optim, nn
 from livelossplot import PlotLosses
 
+from subgraph_matching_via_nn.composite_nn.composite_solver_optimizer_type import CompositeSolverOptimizerType
+from subgraph_matching_via_nn.mask_binarization.LP_binarization import LPBinarizationProblemType
 from subgraph_matching_via_nn.mask_binarization.frank_wolfe_binarizer import IdentityNodeClassifierLPFrankWolfeOptimizer, DeepNodeClassifierLPFrankWolfeOptimizer
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
@@ -262,19 +264,27 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         lr = self.params['lr']
         solver_type = self.params.get("solver_type", None)
         model_params = self.__get_model_params()
-        if solver_type == 'gd':
+        if solver_type == CompositeSolverOptimizerType.GD:
             optimizer = optim.SGD(params=model_params, lr=lr)
-        elif solver_type == 'lbfgs':
+        elif solver_type == CompositeSolverOptimizerType.LBFGS:
             optimizer = optim.LBFGS(params=model_params, lr=lr, max_iter=5,
                                     max_eval=None,
                                     tolerance_grad=1e-07,
                                     tolerance_change=1e-09,
                                     history_size=10,
                                     line_search_fn=None)
-        elif solver_type == 'adam':
+        elif solver_type == CompositeSolverOptimizerType.ADAM:
             weight_decay = self.params['weight_decay']
             optimizer = optim.Adam(model_params, lr=lr, weight_decay=weight_decay)
-        elif solver_type == 'FW':
+        elif solver_type in [CompositeSolverOptimizerType.FW_binary, CompositeSolverOptimizerType.FW_continuous]:
+
+            if solver_type == CompositeSolverOptimizerType.FW_binary:
+                problem_type = LPBinarizationProblemType.Binary
+            elif solver_type == CompositeSolverOptimizerType.FW_continuous:
+                problem_type = LPBinarizationProblemType.Continuous
+            else:
+                raise NotImplementedError("LP problem type not supported")
+
             gradient_average_iterations_amount = self.params.get("gradient_average_iterations_amount", 1)
 
             acquire_mask_gradients_lambda = lambda: self.get_mask_grad_array(original_graph, processed_graph,
@@ -285,7 +295,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                                 gradient_average_iterations_amount=gradient_average_iterations_amount,
                                                 is_working_on_node_mask=is_working_on_node_mask,
                                                 original_graph=original_graph, processed_graph=processed_graph,
-                                                acquire_mask_gradients_lambda=acquire_mask_gradients_lambda)
+                                                acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
+                                                                        problem_type=problem_type)
             elif node_classifier_network_type == NodeClassifierNetworkType.NN:
                 get_output_mask_lambda = lambda: self.get_output_mask(processed_graph_matrix)
                 optimizer = DeepNodeClassifierLPFrankWolfeOptimizer(params=model_params, num_nodes=self.params['m'],
@@ -295,7 +306,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                                                     original_graph=original_graph,
                                                                     processed_graph=processed_graph,
                                                                     acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
-                                                                    get_output_mask=get_output_mask_lambda)
+                                                                    get_output_mask=get_output_mask_lambda,
+                                                                    problem_type=problem_type)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
         return optimizer, model_params

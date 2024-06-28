@@ -6,18 +6,20 @@ import torch
 from overrides import override
 from torch.optim import Optimizer
 from torch.optim.optimizer import ParamsT
-from subgraph_matching_via_nn.mask_binarization.LP_binarization import solve_maximum_weight_subgraph
+from subgraph_matching_via_nn.mask_binarization.LP_binarization import solve_maximum_weight_subgraph, \
+    LPBinarizationProblemType
 from torch.optim.sgd import SGD
 
 
 class BaseFrankWolfeOptimizer(SGD, ABC):
 
     def __init__(self, params: ParamsT, defaults: Dict[str, Any], processed_graph: nx.Graph,
-                 gradient_average_iterations_amount: int):
+                 gradient_average_iterations_amount: int, problem_type: LPBinarizationProblemType):
         ABC.__init__(self)
         SGD.__init__(self, params=params, **defaults)
         self.processed_graph = processed_graph
         self.gradient_average_iterations_amount = gradient_average_iterations_amount
+        self.problem_type = problem_type
 
     def _step_via_sgd(self, closure):
         if closure is not None:
@@ -36,7 +38,7 @@ class BaseFrankWolfeOptimizer(SGD, ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _binarize_mask(self, grads_dict) -> np.ndarray:
+    def _binarize_mask(self, grads_dict) -> Dict:
         raise NotImplementedError()
 
     @abstractmethod
@@ -51,9 +53,14 @@ class BaseFrankWolfeOptimizer(SGD, ABC):
         grads_dict = self._get_grads_as_dict()
 
         # binarization
-        selected_nodes = self._binarize_mask(grads_dict)
+        selected_nodes_map = self._binarize_mask(grads_dict)
         w_th = np.zeros([len(self.processed_graph.nodes()), 1])
-        w_th[selected_nodes] = 1.0
+
+        for node_index, node in enumerate(self.processed_graph.nodes()):
+            mask_val = selected_nodes_map.get(node, None)
+            if mask_val is None:
+                continue
+            w_th[node_index] = mask_val
         w_th = w_th / w_th.sum()
 
         # change param values according to resulting mask
@@ -68,9 +75,10 @@ class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
     def __init__(self, params: ParamsT, is_working_on_node_mask: bool, num_nodes: int, num_edges: int,
                  original_graph: nx.Graph, processed_graph: nx.Graph,
                  acquire_mask_gradients_lambda: Callable[[], List[float]],
-                 gradient_average_iterations_amount: int, kwargs):
+                 gradient_average_iterations_amount: int, problem_type, kwargs):
         super().__init__(params=params, defaults=kwargs, processed_graph=processed_graph,
-                         gradient_average_iterations_amount=gradient_average_iterations_amount)
+                         gradient_average_iterations_amount=gradient_average_iterations_amount,
+                         problem_type=problem_type)
 
         self.is_working_on_node_mask = is_working_on_node_mask
         self.num_nodes = num_nodes
@@ -90,14 +98,15 @@ class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
         return grad_list
 
     @override
-    def _binarize_mask(self, grads_dict) -> np.ndarray:
+    def _binarize_mask(self, grads_dict) -> Dict:
         # apply LP solver on the grad values
 
         num_nodes = self.num_nodes
         num_edges = self.num_edges
 
         grads_dict = {k: -v for k, v in grads_dict.items()}
-        selected_nodes, selected_edges = solve_maximum_weight_subgraph(grads_dict, self.original_graph, num_nodes, num_edges)
+        selected_nodes_map, selected_edges_map = solve_maximum_weight_subgraph(grads_dict, self.original_graph, num_nodes,
+                                                                       num_edges, problem_type=self.problem_type)
         # print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
         # print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
         # print(selected_edges)
@@ -107,9 +116,10 @@ class LPFrankWolfeOptimizer(BaseFrankWolfeOptimizer):
             pass
         else:
             # if working on a line graph, convert the result edges mask to the node mask we are working on
-            selected_nodes = selected_edges
+            selected_nodes_map = selected_edges_map
 
-        return selected_nodes
+        assert (len(selected_nodes_map) > 0)
+        return selected_nodes_map
 
     @abstractmethod
     def _update_model_params_to_match_mask(self, w_mask, closure):
@@ -120,11 +130,12 @@ class IdentityNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
     def __init__(self, params: ParamsT, is_working_on_node_mask: bool, num_nodes: int, num_edges: int,
                  original_graph: nx.Graph, processed_graph: nx.Graph,
                  acquire_mask_gradients_lambda: Callable[[], List[float]],
-                 gradient_average_iterations_amount: int, **kwargs):
+                 gradient_average_iterations_amount: int, problem_type, **kwargs):
         super().__init__(params=params, is_working_on_node_mask=is_working_on_node_mask, num_nodes=num_nodes,
                          num_edges=num_edges, original_graph=original_graph, processed_graph=processed_graph,
                          acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
-                         gradient_average_iterations_amount=gradient_average_iterations_amount, kwargs=kwargs)
+                         gradient_average_iterations_amount=gradient_average_iterations_amount, problem_type=problem_type,
+                         kwargs=kwargs)
 
     @override
     def _update_model_params_to_match_mask(self, w_mask, closure):
@@ -148,11 +159,12 @@ class DeepNodeClassifierLPFrankWolfeOptimizer(LPFrankWolfeOptimizer):
                  original_graph: nx.Graph, processed_graph: nx.Graph,
                  acquire_mask_gradients_lambda: Callable[[], List[float]],
                  get_output_mask: Callable[[], torch.Tensor],
-                 gradient_average_iterations_amount: int, **kwargs):
+                 gradient_average_iterations_amount: int, problem_type: str, **kwargs):
         super().__init__(params=params, is_working_on_node_mask=is_working_on_node_mask, num_nodes=num_nodes,
                          num_edges=num_edges, original_graph=original_graph, processed_graph=processed_graph,
                          acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
-                         gradient_average_iterations_amount=gradient_average_iterations_amount, kwargs=kwargs)
+                         gradient_average_iterations_amount=gradient_average_iterations_amount, problem_type=problem_type,
+                         kwargs=kwargs)
         self.get_output_mask = get_output_mask
 
     @override

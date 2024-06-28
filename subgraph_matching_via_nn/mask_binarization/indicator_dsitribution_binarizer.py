@@ -196,9 +196,9 @@ class IndicatorDistributionBinarizer:
 
             A = (nx.adjacency_matrix(original_graph)).toarray()
 
-            selected_nodes, selected_edges = solve_maximum_weight_subgraph(w, A, num_nodes, num_edges)
+            selected_nodes_map, selected_edges_map = solve_maximum_weight_subgraph(w, A, num_nodes, num_edges)
             print(f'requested: n_nodes = {num_nodes}, n_edges : {num_edges}')
-            print(f'found: n_nodes = {len(selected_nodes)}, n_edges : {len(selected_edges)}')
+            print(f'found: n_nodes = {len(selected_nodes_map)}, n_edges : {len(selected_edges_map)}')
 
             # convert resulting mask W to the format the processed graph is working with (in terms of line graph format)
             is_working_on_node_mask = (len(w) == A.shape[0])
@@ -206,10 +206,14 @@ class IndicatorDistributionBinarizer:
                 pass
             else:
                 # if working on a line graph, convert the result edges mask to the node mask we are working on
-                selected_nodes = selected_edges
+                selected_nodes_map = selected_edges_map
 
             w_th = np.zeros([len(processed_graph.nodes()), 1])
-            w_th[selected_nodes] = 1.0
+            for node_index, node in enumerate(processed_graph.nodes()):
+                mask_val = selected_nodes_map.get(node, None)
+                if mask_val is None:
+                    continue
+                w_th[node_index] = mask_val
         else:
             w_th = w
 
