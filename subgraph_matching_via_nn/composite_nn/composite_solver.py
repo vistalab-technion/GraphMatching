@@ -47,7 +47,7 @@ class PickleSupportedCompositeSolver(nn.Module):
                           zip(self.params["reg_params"], self.params["reg_terms"])]
 
         if len(reg_terms_list) == 0:
-            return 0
+            return torch.zeros(1, device=w.device)
         return torch.stack(reg_terms_list).sum()
 
     def get_output_mask(self, A):
