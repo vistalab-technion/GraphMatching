@@ -157,3 +157,11 @@ def create_weighted_adjacency_matrix_from_node_mask(node_mask: Dict[int, float],
         adjacency_matrix[node, :] = mask_val * np.ones(num_nodes)
         adjacency_matrix[:, node] = mask_val * np.ones(num_nodes)
     return adjacency_matrix
+
+
+def is_neighbor(graph, queried_node_index, node_list):
+    graph_nodes = list(graph.nodes)
+    for node_index in node_list:
+        if graph_nodes[queried_node_index] in graph.neighbors(graph_nodes[node_index]):
+            return True
+    return False

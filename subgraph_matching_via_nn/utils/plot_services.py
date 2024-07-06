@@ -36,7 +36,7 @@ class PlotServices:
         plt.show()
         print(f"First {n_moments} moments: {[f'{value:.4f}' for value in moments]}")
 
-    def plot_subgraph_indicators(self, G, to_line: bool, indicator_name_to_object_map: dict):
+    def plot_subgraph_indicators(self, G, to_line: bool, indicator_name_to_object_map: dict, is_show=True):
         fig, axes = plt.subplots(1, len(indicator_name_to_object_map), figsize=[18, 4])
 
         axes_counter = 0
@@ -47,7 +47,8 @@ class PlotServices:
                                    ax=axes[axes_counter], seed=self.seed)
             axes_counter += 1
 
-        plt.show()
+        if is_show:
+            plt.show()
 
     def get_w_indicator_from_w_indicator_dict(self, w_dict, to_line):
         if to_line:
@@ -70,3 +71,50 @@ class PlotServices:
 
         plt.show()
 
+
+def plot_mask_gt_vs_mask_values(graph, gt_edges, marked_edges, edge_mask_dicts, step_number):
+    # Get the nodes and sort them to ensure consistent matrix indices
+    nodes = sorted(graph.nodes())
+    n = len(nodes)
+
+    # Create a figure and axis for the plot
+    n_subplots = len(edge_mask_dicts)
+    fig, axes = plt.subplots(nrows=1, ncols=n_subplots, figsize=(16 * n_subplots, 16))
+
+    if n_subplots > 1:
+        axes = axes.flat
+    else:
+        axes = [axes]
+
+    for i in range(n_subplots):
+        ax = axes[i]
+
+        ax.set_axis_off()
+
+        # Initialize the matrix with None
+        matrix = [[None for _ in range(n)] for _ in range(n)]
+        # Fill in the matrix with scores from the graph
+        edge_mask_dict = edge_mask_dicts[i]
+        for edge, mask_score in edge_mask_dict.items():
+            i, j = edge
+            matrix[i][j] = "{:.2e}".format(mask_score.item())
+
+        # Create a table plot
+        table = ax.table(cellText=matrix, loc='center', cellLoc='center', colLabels=nodes, rowLabels=nodes,
+                         colColours=["palegreen"] * n, rowColours=["palegreen"] * n)
+        table.auto_set_font_size(False)
+        table.set_fontsize(7)
+        table.scale(1.2, 1.2)
+
+        # Mark the Ground Truth edges
+        for u, v in gt_edges:
+            i, j = nodes.index(u), nodes.index(v)
+            cell = table[(i + 1, j)]
+            cell.set_facecolor("#56b5fd")  # Set GT cell color
+        for u, v in marked_edges:
+            i, j = nodes.index(u), nodes.index(v)
+            cell = table[(i + 1, j)]
+            cell.set_text_props(weight='bold')
+
+    graph_file_name = "mask gt vs marked in binarization %d.png" % step_number
+    plt.savefig(graph_file_name, format="PNG")
