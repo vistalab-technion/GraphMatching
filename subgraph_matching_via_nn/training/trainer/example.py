@@ -6,7 +6,7 @@ from subgraph_matching_via_nn.data.data_loaders import load_graph
 from subgraph_matching_via_nn.data.paths import DATA_PATH, COMP1_FULL_path, \
     COMP1_SUB0_path
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import \
-    MomentEmbeddingNetwork
+    MomentEmbeddingNetwork, MomentEmbeddingType
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import EmbeddingMetricNetwork
 from subgraph_matching_via_nn.graph_metric_networks.graph_metric_nn import \
     MLPGraphMetricNetwork
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     loss_fun = torch.nn.MSELoss()
     embedding_metric_network = EmbeddingMetricNetwork(loss_fun=loss_fun)
     moment_embedding_nn = MomentEmbeddingNetwork(n_moments=6,
-                                                 moments_type='standardized_raw')
+                                                 moments_type=MomentEmbeddingType.StandardizedRaw)
 
     embedding_nns = \
         [
