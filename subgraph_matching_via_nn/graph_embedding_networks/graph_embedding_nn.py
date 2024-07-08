@@ -1,6 +1,8 @@
 import abc
 from abc import abstractmethod, ABC
+from enum import Enum
 
+import numpy as np
 import torch
 from torch import nn, cat
 
@@ -31,23 +33,33 @@ class GraphsBatchEmbeddingNetwork(BaseGraphEmbeddingNetwork, abc.ABC):
         pass
 
 
+class MomentEmbeddingType(Enum):
+    StandardizedCentral = 0,
+    StandardizedRaw = 1,
+    Raw = 2,
+    Central = 3,
+    RawWithFeatures = 4,
+
+
 class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
-    def __init__(self, n_moments, moments_type='standardized'):
+    def __init__(self, n_moments, moments_type: MomentEmbeddingType):
         super().__init__()
         self._moments_type = moments_type
         self._n_moments = n_moments
 
-    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
-        if self._moments_type == 'standardized_central':
+    def forward(self, A, w, node_features=None, params: dict = None, is_use_last_args: bool = False):
+        if self._moments_type == MomentEmbeddingType.StandardizedCentral:
             embedding = self.compute_standardized_central_moments(w, A, self._n_moments)
-        elif self._moments_type == 'standardized_raw':
+        elif self._moments_type == MomentEmbeddingType.StandardizedRaw:
             embedding = self.compute_standardized_raw_moments(w, A, self._n_moments)
-        elif self._moments_type == 'raw':
+        elif self._moments_type == MomentEmbeddingType.Raw:
             embedding = self.compute_raw_moments(w, A, self._n_moments)
-        elif self._moments_type == 'central':
+        elif self._moments_type == MomentEmbeddingType.Central:
             embedding = self.compute_central_moments(w, A, self._n_moments)
+        elif self._moments_type == MomentEmbeddingType.RawWithFeatures:
+            embedding = self.compute_raw_moments_with_features(w, A, self._n_moments, node_features)
         else:
-            raise Exception("unknown moments type")
+            raise Exception(f"Unknown moments type: {self._moments_type}")
         return embedding
 
     @staticmethod
@@ -94,19 +106,32 @@ class MomentEmbeddingNetwork(BaseGraphEmbeddingNetwork):
             moments.append(mom)
         return cat(moments).squeeze()
 
+    @staticmethod
+    def compute_raw_moments_with_features(w, A, n_moments, encoded_node_features):
+        moments = []
+        for k in range(1, n_moments + 1):
+            feat_adj = A @  (encoded_node_features * w)
+            mom = w.T @ (feat_adj ** k)
+            moments.append(mom)
+        return torch.cat(moments).squeeze()
+
     def init_params(self):
         pass
 
     @property
     def output_dim(self):
-        if self._moments_type == 'standardized_central':
+        if self._moments_type == MomentEmbeddingType.StandardizedCentral:
             return self._n_moments - 2
-        elif self._moments_type == 'standardized_raw':
+        elif self._moments_type == MomentEmbeddingType.StandardizedRaw:
             return self._n_moments - 1
-        elif self._moments_type == 'raw':
+        elif self._moments_type == MomentEmbeddingType.Raw:
             return self._n_moments
-        elif self._moments_type == 'central':
+        elif self._moments_type == MomentEmbeddingType.Central:
             return self._n_moments - 1
+        elif self._moments_type == MomentEmbeddingType.RawWithFeatures:
+            return self._n_moments * self.params['node_features_number']
+        else:
+            raise NotImplementedError(f"Moment type not supported: {self._moments_type}")
 
     @property
     def embedding_type(self):

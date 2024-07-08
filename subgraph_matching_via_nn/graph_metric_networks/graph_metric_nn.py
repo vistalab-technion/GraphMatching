@@ -5,7 +5,7 @@ import torch
 from torch import nn, Tensor
 
 from powerful_gnns.util import S2VGraph
-from subgraph_matching_via_nn.data.annotated_graph import AnnotatedGraph, GraphConstants
+from subgraph_matching_via_nn.data.annotated_graph import AnnotatedGraph
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import \
     BaseGraphEmbeddingNetwork, GraphsBatchEmbeddingNetwork
 from subgraph_matching_via_nn.graph_metric_networks.embedding_metric_nn import \

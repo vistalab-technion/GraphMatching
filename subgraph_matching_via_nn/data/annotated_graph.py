@@ -3,12 +3,8 @@ import torch
 from torch import Tensor
 
 from common.graph_utils import relabel_graph_nodes_by_contiguous_order
+from subgraph_matching_via_nn.data.graph_constants import GraphConstants
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
-
-
-class GraphConstants:
-    EDGE_WEIGHT_ATTRIBUTE_NAME = 'weight_attribute'
-    NODE_DEGREE_WEIGHT_ATTRIBUTE_NAME = 'weight_attribute'
 
 
 class AnnotatedGraph(object):

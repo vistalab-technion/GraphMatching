@@ -37,23 +37,23 @@ class CompositeNeuralNetwork(nn.Module):
     def ignore_w_indices(self, ignored_w_indices_list):
         self.ignored_w_indices_list = ignored_w_indices_list
 
-    def forward(self, A, x=None, params: dict = None, is_use_last_args: bool = False):
+    def forward(self, A, x=None, node_features=None, params: dict = None, is_use_last_args: bool = False):
         # compute node classifier
         w = self.classify(A=A, x=x, params=params)
 
         # compute embedding
-        embeddings = self.embed(A=A, w=w, params=params, is_use_last_args=is_use_last_args)
+        embeddings = self.embed(A=A, w=w, node_features=node_features, params=params, is_use_last_args=is_use_last_args)
 
         return embeddings, w
 
-    def embed(self, A, w, params: dict = None, is_use_last_args: bool = False,
+    def embed(self, A, w, node_features=None, params: dict = None, is_use_last_args: bool = False,
               embedding_networks: List[BaseGraphEmbeddingNetwork] = None):
         if embedding_networks is None:
             embedding_networks = self.embedding_networks
 
         embeddings = []
         for embedding_network in embedding_networks:
-            embeddings.append(embedding_network(A=A, w=w, params=params, is_use_last_args=is_use_last_args))
+            embeddings.append(embedding_network(A=A, w=w, node_features=node_features, params=params, is_use_last_args=is_use_last_args))
             # TODO: apply mlp. for example
             #  ||a(emb1-emb1_gt)||^2+||b(emb2-emb2_gt)||^2  s.t. (a^2+b^2)=1
             #  total_emb = mlp(embeddings) - > ||total_emb - total_emb_gt||^2

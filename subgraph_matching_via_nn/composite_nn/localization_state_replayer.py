@@ -33,6 +33,8 @@ class LocalizationStateReplayer:
         w = self.state.w
         sub_graph = self.state.sub_graph
         return self.composite_solver.solve_using_external_params(w, sub_graph.A_full, sub_graph.A_sub,
+                                                                 A_node_features=sub_graph.A_node_features,
+                                                                 A_sub_node_features=sub_graph.A_sub_node_features,
                                                                  embedding_networks=embedding_networks, dtype=TORCH_DTYPE)
 
     def get_params_list(self, embedding_networks: List[BaseGraphEmbeddingNetwork]):

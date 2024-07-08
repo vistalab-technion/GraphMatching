@@ -43,13 +43,12 @@ class GraphProcessor(BaseGraphProcessor):
             processed_G = nx.line_graph(processed_G)
             if edge_indicator is not None:
                 edge_indicator = original_node_indicator
-            else:
-                edge_indicator = None
 
         if edge_indicator is not None:
             G_sub_as_sub_graph = SubGraph(sub_graph.G_sub, None)
             processed_G_sub = self.pre_process(G_sub_as_sub_graph)
-            sub_graph = SubGraph(processed_G, processed_G_sub, is_line_graph=is_line_graph)
+            sub_graph = SubGraph(processed_G, processed_G_sub, is_line_graph=is_line_graph, original_graph=sub_graph.G,
+                                 original_subgraph=sub_graph.G_sub)
             return sub_graph
         else:
             return processed_G

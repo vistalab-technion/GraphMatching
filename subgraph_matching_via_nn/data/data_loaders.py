@@ -1,10 +1,14 @@
 import pickle
 from logging import exception
 import networkx as nx
+import numpy as np
+import torch
 
+from subgraph_matching_via_nn.data.graph_constants import GraphConstants
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
     sample_connected_subgraph, generate_wheel_graph, generate_random_graph
+from subgraph_matching_via_nn.utils.utils import extract_node_features_from_graph, set_node_features_for_graph
 
 
 def load_graph(type: str = 'random',
@@ -50,11 +54,18 @@ def load_graph(type: str = 'random',
         G = nx.from_edgelist(circuit_edges)
         G_sub = G.edge_subgraph(subcircuit_edges)
 
-    elif 'subcircuit':
+    elif type == 'subcircuit':
 
         def remove_isolated_nodes_from_graph(graph):
             isolated_nodes_indices = list(nx.isolates(graph))
             graph.remove_nodes_from(isolated_nodes_indices)
+
+        def one_hot_encode_node_features(graph, unique_features, feature_name):
+            node_features = extract_node_features_from_graph(graph, feature_name)
+            feature_map = {feature: np.eye(len(unique_features))[i] for i, feature in enumerate(unique_features)}
+            encoded_features = torch.from_numpy(np.array([feature_map[feature] for feature in node_features])).to(
+                dtype=torch.double)
+            set_node_features_for_graph(graph, feature_name, encoded_features)
 
         g_full_path = loader_params['data_path'] + loader_params['g_full_path']
         g_sub_path = loader_params['data_path'] + loader_params['g_sub_path']
@@ -66,6 +77,14 @@ def load_graph(type: str = 'random',
 
         G.remove_edges_from(nx.selfloop_edges(G))
         G_sub.remove_edges_from(nx.selfloop_edges(G_sub))
+
+        feature_name = GraphConstants.NODE_GATE_TYPE_ATTRIBUTE_NAME
+
+        # TODO: this should be replaced with all the possible catergories list, to make sure the encodings are consistent
+        unique_features = list(set(extract_node_features_from_graph(G, feature_name)))
+
+        one_hot_encode_node_features(G, unique_features, feature_name)
+        one_hot_encode_node_features(G_sub, unique_features, feature_name)
 
     else:
         raise exception(f"type = {type} not supported")

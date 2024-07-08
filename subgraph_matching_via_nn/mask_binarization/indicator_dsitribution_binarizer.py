@@ -80,6 +80,8 @@ class IndicatorDistributionBinarizer:
         grad_w_star_copy = torch.tensor(w_star, requires_grad=True)
         updated_w_star_loss = composite_solver.solve_using_external_params(grad_w_star_copy, processed_sub_graph.A_full,
                                                                            SubGraph(reference_subgraph).A_full,
+                                                                           A_node_features=processed_sub_graph.A_node_features,
+                                                                           A_sub_node_features=processed_sub_graph.A_sub_node_features,
                                                                            embedding_networks=composite_solver.composite_nn.embedding_networks,
                                                                            dtype=TORCH_DTYPE)
 
@@ -215,6 +217,8 @@ class IndicatorDistributionBinarizer:
                 w_star = torch.tensor(w_star, requires_grad=True)
                 candidate_mask_node_loss = composite_solver.solve_using_external_params(w_star, processed_sub_graph.A_full,
                                                                            SubGraph(reference_subgraph).A_full,
+                                                                                        A_node_features=processed_sub_graph.A_node_features,
+                                                                                        A_sub_node_features=processed_sub_graph.A_sub_node_features,
                                                                            embedding_networks=composite_solver.composite_nn.embedding_networks,
                                                                            dtype=TORCH_DTYPE)
                 candidate_mask_node_losses[candidate_mask_node_index] = candidate_mask_node_loss.item()

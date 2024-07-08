@@ -183,3 +183,17 @@ def plot_graph_with_colors(G: nx.graph,
 def get_graph_adj_mat_as_tensor(g: nx.graph):
     # return torch.from_numpy(nx.to_numpy_array(g)).type(TORCH_DTYPE)
     return torch.from_numpy((nx.adjacency_matrix(g)).toarray()).type(TORCH_DTYPE)
+
+
+def extract_node_features_from_graph(g: nx.graph, feature_name):
+    try:
+        node_features = [g.nodes[i][feature_name] for i in range(len(g.nodes))]
+    except:
+        node_features = None
+
+    return node_features
+
+
+def set_node_features_for_graph(g: nx.graph, feature_name, node_features: torch.Tensor):
+    for i in range(len(g.nodes)):
+        g.nodes[i][feature_name] = node_features[i]

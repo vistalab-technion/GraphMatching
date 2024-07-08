@@ -57,9 +57,9 @@ class PickleSupportedCompositeSolver(nn.Module):
 
         return w
 
-    def get_composite_loss_terms(self, A, embeddings_sub, is_use_last_args=False):
+    def get_composite_loss_terms(self, A, embeddings_sub, node_features, is_use_last_args=False):
         x0 = self.params.get("x0", None)
-        embeddings_full, w = self.composite_nn(A, x0, self.params, is_use_last_args=is_use_last_args)
+        embeddings_full, w = self.composite_nn(A, x0, params=self.params, node_features=node_features, is_use_last_args=is_use_last_args)
 
         loss, reg = self.__get_loss_given_embeddings_and_adj_matrix(embeddings_full, embeddings_sub, A, w)
 
@@ -73,20 +73,22 @@ class PickleSupportedCompositeSolver(nn.Module):
 
         A = sub_graph.A_full
         A_sub = sub_graph.A_sub
+        A_node_features = sub_graph.A_node_features
+        A_sub_node_features = sub_graph.A_sub_node_features
 
-        return A, A_sub, G, G_sub
+        return A, A_sub, G, G_sub, A_node_features, A_sub_node_features
 
     def _embedding_sub(self, G: nx.graph, G_sub: nx.graph, dtype):
-        A, A_sub, G, G_sub = self.__pre_process_graphs(G, G_sub)
+        A, A_sub, G, G_sub, A_node_features, A_sub_node_features = self.__pre_process_graphs(G, G_sub)
         device = self.params['device']
         A = A.to(device=device)
         A_sub = A_sub.to(device=device)
 
-        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype),
+        embeddings_sub = self.composite_nn.embed(A=A_sub.detach().type(dtype), node_features=A_sub_node_features,
                                                  w=uniform_dist(A_sub.shape[0]).detach().to(
                                                      device=self.params['device']))
 
-        return A, A_sub, G, G_sub, embeddings_sub
+        return A, A_sub, G, G_sub, A_node_features, A_sub_node_features, embeddings_sub
 
     def __get_loss_given_embeddings_and_adj_matrix(self, embeddings_full, embeddings_sub, A, w):
         loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
@@ -97,7 +99,8 @@ class PickleSupportedCompositeSolver(nn.Module):
 
     # for calculating the grad of the loss grad with respect to the embedding params
     def solve_using_external_params(self, w: torch.Tensor, A: torch.Tensor, A_sub: torch.Tensor,
-                       embedding_networks: List[BaseGraphEmbeddingNetwork], dtype=TORCH_DTYPE):
+                                    A_node_features, A_sub_node_features,
+                                    embedding_networks: List[BaseGraphEmbeddingNetwork], dtype=TORCH_DTYPE):
         device = self.params['device']
         A_sub = A_sub.type(dtype).to(device=device)
         A = A.type(dtype).to(device=device)
@@ -105,11 +108,11 @@ class PickleSupportedCompositeSolver(nn.Module):
         # compute reference embedding
         embeddings_sub = self.composite_nn.embed(A=A_sub,
                                                  w=uniform_dist(A_sub.shape[0], device=device).detach(),
-                                                 embedding_networks=embedding_networks)
+                                                 node_features=A_sub_node_features, embedding_networks=embedding_networks)
 
         # compute w based embedding
         embeddings_full = self.composite_nn.embed(A=A, w=w, is_use_last_args=False,
-                                                  embedding_networks=embedding_networks)
+                                                  node_features=A_node_features, embedding_networks=embedding_networks)
 
         loss, reg = self.__get_loss_given_embeddings_and_adj_matrix(embeddings_full, embeddings_sub, A, w)
         full_loss = loss + reg
@@ -151,14 +154,18 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         A_sub_indicator = A_sub_indicator.to(device=device)
 
         embeddings_gt = self.composite_nn.embed(A=A_full_processed.detach().type(TORCH_DTYPE),
-                                                w=gt_indicator_tensor)
+                                                w=gt_indicator_tensor, node_features=processed_sub_graph.A_node_features)
         embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
-                                                 w=A_sub_indicator)
+                                                 w=A_sub_indicator, node_features=processed_sub_graph.A_sub_node_features)
         ref_loss = self.embedding_metric_nn(embeddings_gt, embeddings_sub)
 
         return ref_loss
 
-    def compare(self, A_full_processed, A_sub_processed, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
+    def compare(self, processed_sub_graph: SubGraph, gt_indicator_tensor, A_sub_indicator=None, print_embeddings=True):
+        A_full_processed = processed_sub_graph.A_full
+        A_sub_processed = processed_sub_graph.A_sub
+        A_full_processed_node_features = processed_sub_graph.A_node_features
+
         device = self.params['device']
         if A_sub_indicator is None:
             A_sub_indicator = uniform_dist(A_sub_processed.shape[0]).detach()
@@ -168,14 +175,14 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         A_full_processed = A_full_processed.to(device=device)
 
         embeddings_sub = self.composite_nn.embed(A=A_sub_processed.detach().type(TORCH_DTYPE),
-                                            w=A_sub_indicator)
+                                            w=A_sub_indicator, node_features=processed_sub_graph.A_sub_node_features)
 
-        embeddings_full, w = self.composite_nn(A=A_full_processed, params=self.params)
+        embeddings_full, w = self.composite_nn(A=A_full_processed, params=self.params, node_features=A_full_processed_node_features)
         loss = self.embedding_metric_nn(embeddings_full=embeddings_full,
                                    embeddings_subgraph=embeddings_sub)
 
         embeddings_gt = self.composite_nn.embed(A=A_full_processed.detach().type(TORCH_DTYPE),
-                                           w=gt_indicator_tensor)
+                                           w=gt_indicator_tensor, node_features=A_full_processed_node_features)
         ref_loss = self.embedding_metric_nn(embeddings_gt, embeddings_sub)
 
 
@@ -324,8 +331,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         return torch.stack(graphs_distances_list).unsqueeze(1)
 
     def get_loss_and_mask_for_graph_and_subgraph(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
-        A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
-        loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub)
+        A, A_sub, G, G_sub, A_node_features, A_sub_node_features, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
+        loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, node_features=A_node_features)
         return loss + reg, w
 
     def init_mask_and_solve_one_round(self, sub_graph, original_reference_subgraph):
@@ -355,7 +362,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
 
     def solve(self, G: nx.graph, G_sub: nx.graph, dtype=TORCH_DTYPE):
         max_grad_norm = self.params['max_grad_norm']
-        A, A_sub, G, G_sub, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
+        A, A_sub, G, G_sub, A_node_features, A_sub_node_features, embeddings_sub = self._embedding_sub(G, G_sub, dtype)
 
         self.composite_nn.train() # Set the model to training mode
 
@@ -373,7 +380,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                 if inner_optimizer_iteration is not None:
                     is_use_last_args = is_use_last_args or (inner_optimizer_iteration > 0)
 
-                loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, is_use_last_args=is_use_last_args)
+                loss, reg, w = self.get_composite_loss_terms(A, embeddings_sub, node_features=A_node_features, is_use_last_args=is_use_last_args)
                 full_loss = loss + reg
 
                 if is_calc_grad:
