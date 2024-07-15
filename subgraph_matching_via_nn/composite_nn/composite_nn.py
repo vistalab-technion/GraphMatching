@@ -39,7 +39,7 @@ class CompositeNeuralNetwork(nn.Module):
 
     def forward(self, A, x=None, node_features=None, params: dict = None, is_use_last_args: bool = False):
         # compute node classifier
-        w = self.classify(A=A, x=x, params=params)
+        w = self.classify(A=A, x=x, node_features=node_features, params=params)
 
         # compute embedding
         embeddings = self.embed(A=A, w=w, node_features=node_features, params=params, is_use_last_args=is_use_last_args)
@@ -59,8 +59,8 @@ class CompositeNeuralNetwork(nn.Module):
             #  total_emb = mlp(embeddings) - > ||total_emb - total_emb_gt||^2
         return embeddings
 
-    def classify(self, A, x=None, params: dict = None):
-        w = self.node_classifier_network(A=A, x=x, params=params)
+    def classify(self, A, x=None, node_features=None, params: dict = None):
+        w = self.node_classifier_network(A=A, x=x, node_features=node_features, params=params)
         if params.get('apply_quantization', None):
             w = self.quantize_layer(w)
 

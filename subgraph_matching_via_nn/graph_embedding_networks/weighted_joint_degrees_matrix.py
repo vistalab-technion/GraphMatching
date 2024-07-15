@@ -18,7 +18,7 @@ class WeightedJointDegreesEmbeddingNetwork(BaseGraphEmbeddingNetwork):
     def embedding_type(self):
         return "WeightedJointDegreesEmbedding"
 
-    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
+    def forward(self, A, w, node_features=None, params: dict = None, is_use_last_args: bool = False):
         # input: A, w
         # computes the joint degree matrix
         #     with the following variant: sum the w (when we work with edge mask)

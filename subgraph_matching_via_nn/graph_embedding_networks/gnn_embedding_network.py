@@ -16,7 +16,7 @@ class GNNEmbeddingNetwork(GraphsBatchEmbeddingNetwork):
         embeddings = self.gnn_model.get_embedding(batch_graph)
         return embeddings
 
-    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
+    def forward(self, A, w, node_features=None, params: dict = None, is_use_last_args: bool = False):
         if is_use_last_args:
             s2v_graph = self.last_used_s2v_graph
         else:
@@ -24,7 +24,7 @@ class GNNEmbeddingNetwork(GraphsBatchEmbeddingNetwork):
             G = nx.from_numpy_array(A.detach().cpu().numpy())
 
             # nx.Graph -> S2VGraph
-            s2v_graph = S2VGraph(G, label=None)
+            s2v_graph = S2VGraph(G, label=None, node_features=node_features)
             batch_graph, _ = load_data_given_graph_list_and_label_map([s2v_graph], label_dict = {}, degree_as_tag=True,
                                                                       device=w.device, print_stats=False)
 

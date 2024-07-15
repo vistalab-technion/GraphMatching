@@ -90,7 +90,7 @@ class GANNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
         return generator
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         if x is None:
             x = self.noise_input
         else:

@@ -55,7 +55,7 @@ class IdentityNodeClassifierNetwork(BaseNodeClassifierNetwork):
         self.classification_layer = classification_layer
         self.init_params()
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         # x = torch.matmul(A, self.weights)
         x = self.weights
         # x = self.diff_binarize(x, params)
@@ -116,7 +116,7 @@ class NNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
             self.classification_layer.init_weights()
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         if x is None:
             x = self.x_stub
         else:
@@ -168,7 +168,7 @@ class GCNNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
             self.classification_layer.init_weights()
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         edge_index = A.nonzero().t()
 
         if x is None:
@@ -212,7 +212,7 @@ class SequentialNodeClassifierNetwork(BaseNodeClassifierNetwork):
         for network in self.networks:
             network.init_params(default_weights=default_weights)
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         prev_network_output = x
         for network in self.networks:
             prev_network_output = network.forward(A=A, x=prev_network_output, params=params)
@@ -287,7 +287,7 @@ class GoogleSoftmaxNodeClassifierNetwork(BaseNodeClassifierNetwork):
         topk_hard = GoogleSoftmaxNodeClassifierNetwork.hard_topk(w, k)
         return topk_hard + topk_soft - topk_soft.detach()
 
-    def forward(self, A, x=None, params: dict = None):
+    def forward(self, A, x=None, node_features=None, params: dict = None):
         # TODO? after learning mask:
         # rx_binary = GoogleSoftmaxNodeClassifierNetwork.hard_topk(self.rx, self.n_out)
         # during learning:

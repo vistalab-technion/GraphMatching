@@ -13,7 +13,7 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
+    def forward(self, A, w, node_features: torch.Tensor = None, params: dict = None, is_use_last_args: bool = False):
         pass
 
     @property
@@ -151,7 +151,7 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
         self._indicator_scale = indicator_scale
         self._zero_eig_scale = zero_eig_scale
 
-    def forward(self, A, w, params: dict = None, is_use_last_args: bool = False):
+    def forward(self, A, w, node_features=None, params: dict = None, is_use_last_args: bool = False):
         H = self.spectral_operator(A, w)
         evals, evecs = torch.linalg.eigh(H)
         embedding = evals[:self._n_eigs]

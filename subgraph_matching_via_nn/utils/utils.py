@@ -187,7 +187,7 @@ def get_graph_adj_mat_as_tensor(g: nx.graph):
 
 def extract_node_features_from_graph(g: nx.graph, feature_name):
     try:
-        node_features = [g.nodes[i][feature_name] for i in range(len(g.nodes))]
+        node_features = [attributes[feature_name] for node_i, attributes in g.nodes(data=True)]
     except:
         node_features = None
 
@@ -195,5 +195,5 @@ def extract_node_features_from_graph(g: nx.graph, feature_name):
 
 
 def set_node_features_for_graph(g: nx.graph, feature_name, node_features: torch.Tensor):
-    for i in range(len(g.nodes)):
-        g.nodes[i][feature_name] = node_features[i]
+    for (node_i, attributes), node_feature in zip(g.nodes(data=True), node_features):
+        attributes[feature_name] = node_feature

@@ -50,10 +50,10 @@ class PickleSupportedCompositeSolver(nn.Module):
             return torch.zeros(1, device=w.device)
         return torch.stack(reg_terms_list).sum()
 
-    def get_output_mask(self, A):
+    def get_output_mask(self, A, A_node_features):
         params = self.params
         x0 = params.get("x0", None)
-        w = self.composite_nn.classify(A=A, x=x0, params=params)
+        w = self.composite_nn.classify(A=A, x=x0, node_features=A_node_features, params=params)
 
         return w
 
@@ -267,7 +267,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         return list(self.composite_nn.parameters())
 
     def _create_optimizer(self, original_graph: nx.Graph, processed_graph: nx.Graph, processed_graph_matrix: torch.Tensor,
-                          original_reference_subgraph: nx.Graph, is_working_on_node_mask: bool):
+                          A_node_features: torch.Tensor, original_reference_subgraph: nx.Graph, is_working_on_node_mask: bool):
         lr = self.params['lr']
         solver_type = self.params.get("solver_type", None)
         model_params = self.__get_model_params()
@@ -305,7 +305,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                                 acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
                                                                         problem_type=problem_type)
             elif node_classifier_network_type == NodeClassifierNetworkType.NN:
-                get_output_mask_lambda = lambda: self.get_output_mask(processed_graph_matrix)
+                get_output_mask_lambda = lambda: self.get_output_mask(A=processed_graph_matrix, A_node_features=A_node_features)
                 optimizer = DeepNodeClassifierLPFrankWolfeOptimizer(params=model_params, num_nodes=self.params['m'],
                                                                     num_edges=self.params['n'],
                                                                     gradient_average_iterations_amount=gradient_average_iterations_amount,
@@ -370,6 +370,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         optimizer, model_params = self._create_optimizer(original_graph=G,
                                                          processed_graph=sub_graph.G,
                                                          processed_graph_matrix=A,
+                                                         A_node_features=A_node_features,
                                                          original_reference_subgraph=G_sub,
                                                          is_working_on_node_mask=not sub_graph.is_line_graph)
 
@@ -400,7 +401,7 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                    is_log=is_log, is_calc_grad=is_calc_grad)
                            )
 
-        w_star = self.composite_nn.classify(A=A, params=self.params).detach().cpu().numpy()
+        w_star = self.composite_nn.classify(A=A, node_features=A_node_features, params=self.params).detach().cpu().numpy()
         return w_star
 
     def set_initial_params_based_on_previous_optimum(self, w_star):

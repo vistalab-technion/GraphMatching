@@ -63,6 +63,8 @@ def load_graph(type: str = 'random',
         def one_hot_encode_node_features(graph, unique_features, feature_name):
             node_features = extract_node_features_from_graph(graph, feature_name)
             feature_map = {feature: np.eye(len(unique_features))[i] for i, feature in enumerate(unique_features)}
+            feature_map[np.nan] = np.full((len(unique_features)), np.nan) #handle missing node
+
             encoded_features = torch.from_numpy(np.array([feature_map[feature] for feature in node_features])).to(
                 dtype=torch.double)
             set_node_features_for_graph(graph, feature_name, encoded_features)
