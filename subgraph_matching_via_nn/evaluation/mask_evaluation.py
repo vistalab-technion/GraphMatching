@@ -5,6 +5,8 @@ from os import cpu_count
 from typing import Dict
 import multiprocessing as mp
 import networkx as nx
+import numpy as np
+
 from common.graph_utils import SubGraphGenerator
 from common.logger import TimeLogging
 from metrics.accuracy_metrics import evaluate_binary_classifier
@@ -139,3 +141,12 @@ def measure_k_subgraphs_nodes_against_gt_mask(full_graph, k_subgraphs_original_n
     _ = TimeLogging.log_time(curr_time, "finished measure_k_subgraphs_nodes_against_gt_mask")
 
     return num_correct_nodes_to_num_k_subgraphs_map
+
+
+def is_connected_subgraph(full_graph, binary_w):
+    sampled_nodes = np.nonzero(binary_w.reshape(-1)).flatten().tolist()
+    # sampled_nodes = np.nonzero(binary_w)[0]
+    subgraph = full_graph.subgraph(sampled_nodes)
+    print(subgraph.nodes)
+    print(subgraph.edges)
+    return subgraph, nx.is_connected(subgraph)
