@@ -5,6 +5,8 @@ from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_
 from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.classification_layer import \
     TopkSoftmaxClassificationLayer, SigmoidClassificationLayer, SoftmaxClassificationLayer, \
     SquaredNormalizedClassificationLayer, IdentityClassificationLayer
+from subgraph_matching_via_nn.graph_classifier_networks.clustering_node_classifier_network import \
+    ClusteringNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_networks import NNNodeClassifierNetwork, \
     IdentityNodeClassifierNetwork, GCNNodeClassifierNetwork, GoogleSoftmaxNodeClassifierNetwork
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
@@ -23,7 +25,8 @@ class NodeClassifierNetworkType(Enum):
     Identity = 1,
     GCN = 2,
     GoogleSoftmax = 3,
-    GAN = 5,
+    GAN = 4,
+    Clustering = 5,
 
 
 class NodeClassifierNetworkFactory:
@@ -83,6 +86,9 @@ class NodeClassifierNetworkFactory:
                                                                device=device,
                                                                num_workers=num_workers,
                                                                use_simple_gan=use_simple_gan)
+        elif node_classifier_network_type == NodeClassifierNetworkType.Clustering:
+            node_classifier_network = ClusteringNodeClassifierNetwork(output_dim=output_dim,
+                                                                      classification_layer=last_layer, device=device)
         else:
             raise ValueError(f"Unsupported layer type: {node_classifier_network_type}")
 

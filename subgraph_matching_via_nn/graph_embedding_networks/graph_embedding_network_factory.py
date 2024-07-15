@@ -4,7 +4,7 @@ from typing import List
 import torch
 from subgraph_matching_via_nn.graph_embedding_networks.gnn_embedding_network import GNNEmbeddingNetwork
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_nn import MomentEmbeddingNetwork, \
-    SpectralEmbeddingNetwork
+    SpectralEmbeddingNetwork, StubGraphEmbeddingNetwork
 from subgraph_matching_via_nn.utils.graph_utils import laplacian
 from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 
@@ -13,6 +13,7 @@ class EmbeddingNetworkType(Enum):
     Moments = 0,
     Spectral = 1,
     GraphCNN = 2,
+    Stub = 3,
 
 
 class GraphEmbeddingNetworkFactory:
@@ -42,6 +43,8 @@ class GraphEmbeddingNetworkFactory:
                 model_factory_func = params["graphcnn_factory_func"]
                 model = model_factory_func(device='cpu')
                 embedding_nn = GNNEmbeddingNetwork(gnn_model=model, params=params)
+            elif embedding_network_type == EmbeddingNetworkType.Stub:
+                embedding_nn = StubGraphEmbeddingNetwork()
             else:
                 raise ValueError(f"Unsupported network type: {embedding_network_type}")
 

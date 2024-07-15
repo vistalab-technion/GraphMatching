@@ -7,6 +7,7 @@ from torch import optim, nn
 from livelossplot import PlotLosses
 
 from subgraph_matching_via_nn.composite_nn.composite_solver_optimizer_type import CompositeSolverOptimizerType
+from subgraph_matching_via_nn.composite_nn.stub_optimizer import StubOptimizer
 from subgraph_matching_via_nn.mask_binarization.LP_binarization import LPBinarizationProblemType
 from subgraph_matching_via_nn.mask_binarization.frank_wolfe_binarizer import IdentityNodeClassifierLPFrankWolfeOptimizer, DeepNodeClassifierLPFrankWolfeOptimizer
 from subgraph_matching_via_nn.composite_nn.composite_nn import CompositeNeuralNetwork
@@ -315,6 +316,8 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
                                                                     acquire_mask_gradients_lambda=acquire_mask_gradients_lambda,
                                                                     get_output_mask=get_output_mask_lambda,
                                                                     problem_type=problem_type)
+        elif solver_type == CompositeSolverOptimizerType.STUB:
+            optimizer = StubOptimizer(model_params)
         else:
             raise ValueError(f"Unknown optimizer choice: {solver_type}")
         return optimizer, model_params

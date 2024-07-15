@@ -13,6 +13,7 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
+    @abstractmethod
     def forward(self, A, w, node_features: torch.Tensor = None, params: dict = None, is_use_last_args: bool = False):
         pass
 
@@ -25,6 +26,20 @@ class BaseGraphEmbeddingNetwork(nn.Module, ABC):
     @abstractmethod
     def embedding_type(self):
         pass
+
+
+class StubGraphEmbeddingNetwork(BaseGraphEmbeddingNetwork):
+
+    def forward(self, A, w, node_features: torch.Tensor = None, params: dict = None, is_use_last_args: bool = False):
+        return torch.zeros(device=w.device, size=(1, 1))
+
+    @property
+    def embedding_type(self):
+        return "STUB"
+
+    @property
+    def output_dim(self):
+        return 1
 
 
 class GraphsBatchEmbeddingNetwork(BaseGraphEmbeddingNetwork, abc.ABC):

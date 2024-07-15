@@ -4,3 +4,4 @@ class CompositeSolverOptimizerType:
     LBFGS=3,
     FW_binary=4,
     FW_continuous=5,
+    STUB=6,
