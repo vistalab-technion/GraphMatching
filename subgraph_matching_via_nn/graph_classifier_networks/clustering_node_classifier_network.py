@@ -20,7 +20,7 @@ class ClusteringNodeClassifierNetwork(BaseNodeClassifierNetwork):
 
     def __cluster_by_node_features(self, A, node_features, k):
         # Apply k-means clustering
-        kmeans = KMeans(n_clusters=2, random_state=42)
+        kmeans = KMeans(n_clusters=k, random_state=42)
         kmeans.fit(node_features)
 
         # Get cluster labels
@@ -49,7 +49,7 @@ class ClusteringNodeClassifierNetwork(BaseNodeClassifierNetwork):
         return w
 
     def forward(self, A, x=None, node_features=None, params: dict = None):
-        x = self.__cluster_by_node_features(A=A, node_features=node_features)
+        x = self.__cluster_by_node_features(A=A, node_features=node_features, k=2)
         # x = self.diff_binarize(x, params)
         w = self.classification_layer(A, x)
 
