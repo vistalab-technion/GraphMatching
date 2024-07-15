@@ -5,6 +5,15 @@ import networkx as nx
 import numpy as np
 
 
+def get_node_indicator_given_subgraph_nodes(G: nx.graph, subgraph_nodes):
+    # Set the indices corresponding to the subgraph nodes to 1
+    subgraph_node_indices = [list(G.nodes()).index(node) for node in subgraph_nodes]
+
+    w_indicator = np.zeros(len(G.nodes()))
+    w_indicator[subgraph_node_indices] = 1.0
+    return w_indicator
+
+
 def get_node_indicator(G: nx.graph, G_sub: nx.graph):
     """
     Create node indicator for G_sub in G (assuming G_sub was extracted from G)
@@ -14,11 +23,10 @@ def get_node_indicator(G: nx.graph, G_sub: nx.graph):
     :return: w_indicator - a vector with w[i] ==1 if node i of G is a node in G_sub
     , otherwise w_indicator[i]==0.
     """
-    # Set the indices corresponding to the subgraph nodes to 1
-    subgraph_node_indices = [list(G.nodes()).index(node) for node in G_sub.nodes()]
+    subgraph_nodes = G_sub.nodes()
     # subgraph_node_indices = list(G_sub.nodes())
-    w_indicator = np.zeros(len(G.nodes()))
-    w_indicator[subgraph_node_indices] = 1.0
+
+    w_indicator = get_node_indicator_given_subgraph_nodes(G, subgraph_nodes)
     return w_indicator
 
 
