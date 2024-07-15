@@ -8,7 +8,8 @@ from subgraph_matching_via_nn.data.graph_constants import GraphConstants
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.graph_generators.util import generate_random_tree, \
     sample_connected_subgraph, generate_wheel_graph, generate_random_graph
-from subgraph_matching_via_nn.utils.utils import extract_node_features_from_graph, set_node_features_for_graph
+from subgraph_matching_via_nn.utils.utils import extract_node_features_from_graph, set_node_features_for_graph, \
+    delete_node_features_for_graph
 
 
 def load_graph(type: str = 'random',
@@ -71,6 +72,7 @@ def load_graph(type: str = 'random',
 
         g_full_path = loader_params['data_path'] + loader_params['g_full_path']
         g_sub_path = loader_params['data_path'] + loader_params['g_sub_path']
+        is_use_features = loader_params['is_use_features']
 
         G = pickle.load(open(g_full_path, 'rb'))
         G_sub = pickle.load(open(g_sub_path, 'rb'))
@@ -81,13 +83,15 @@ def load_graph(type: str = 'random',
         G_sub.remove_edges_from(nx.selfloop_edges(G_sub))
 
         feature_name = GraphConstants.NODE_GATE_TYPE_ATTRIBUTE_NAME
+        if is_use_features:
+            # TODO: this should be replaced with all the possible catergories list, to make sure the encodings are consistent
+            unique_features = list(set(extract_node_features_from_graph(G, feature_name)))
 
-        # TODO: this should be replaced with all the possible catergories list, to make sure the encodings are consistent
-        unique_features = list(set(extract_node_features_from_graph(G, feature_name)))
-
-        one_hot_encode_node_features(G, unique_features, feature_name)
-        one_hot_encode_node_features(G_sub, unique_features, feature_name)
-
+            one_hot_encode_node_features(G, unique_features, feature_name)
+            one_hot_encode_node_features(G_sub, unique_features, feature_name)
+        else:
+            delete_node_features_for_graph(G, feature_name)
+            delete_node_features_for_graph(G_sub, feature_name)
     else:
         raise exception(f"type = {type} not supported")
 

@@ -197,3 +197,8 @@ def extract_node_features_from_graph(g: nx.graph, feature_name):
 def set_node_features_for_graph(g: nx.graph, feature_name, node_features: torch.Tensor):
     for (node_i, attributes), node_feature in zip(g.nodes(data=True), node_features):
         attributes[feature_name] = node_feature
+
+
+def delete_node_features_for_graph(g: nx.graph, feature_name):
+    for node_i, attributes in g.nodes(data=True):
+        del attributes[feature_name]
