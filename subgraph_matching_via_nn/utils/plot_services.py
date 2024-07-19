@@ -72,7 +72,7 @@ class PlotServices:
         plt.show()
 
 
-def plot_mask_gt_vs_mask_values(graph, gt_edges, marked_edges, edge_mask_dicts, step_number):
+def plot_mask_gt_vs_mask_values(graph, gt_edges, marked_edges, disabled_edges, edge_mask_dicts, step_number):
     # Get the nodes and sort them to ensure consistent matrix indices
     nodes = sorted(graph.nodes())
     n = len(nodes)
@@ -115,6 +115,14 @@ def plot_mask_gt_vs_mask_values(graph, gt_edges, marked_edges, edge_mask_dicts, 
             i, j = nodes.index(u), nodes.index(v)
             cell = table[(i + 1, j)]
             cell.set_text_props(weight='bold')
+        for u, v in disabled_edges:
+            i, j = nodes.index(u), nodes.index(v)
+            cell = table[(i + 1, j)]
+            # cell.set_text_props(weight='bold')
+            text = cell.get_text().get_text()
+            # Adding strikethrough characters
+            strikethrough_text = ''.join([char + '\u0336' for char in text])
+            cell.get_text().set_text(strikethrough_text)
 
     graph_file_name = "mask gt vs marked in binarization %d.png" % step_number
     plt.savefig(graph_file_name, format="PNG")

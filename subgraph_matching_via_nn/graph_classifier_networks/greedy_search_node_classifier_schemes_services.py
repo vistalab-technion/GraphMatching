@@ -13,30 +13,29 @@ from subgraph_matching_via_nn.utils.utils import TORCH_DTYPE
 class GreedySearchNodeClassifierSchemesServices:
 
     @staticmethod
-    def __mark_irrelevant_mask_node_entries(graph, chosen_nodes_indices, mask_scores, is_arg_max_score_mode):
+    def __mark_irrelevant_mask_node_entries(graph, chosen_nodes_indices, discarded_nodes_indices, mask_scores, is_arg_max_score_mode):
         irrelevant_mask_score_value = float("inf")
         if is_arg_max_score_mode:
             irrelevant_mask_score_value = float("-inf")
 
         # should choose nodes only reachable by 1-hop from current nodes, which are not already chosen
-
+        already_marked_nodes_indices = chosen_nodes_indices + discarded_nodes_indices
         if len(chosen_nodes_indices) == 0:
             return
 
         for mask_node_index, _ in enumerate(mask_scores):
-            if (mask_node_index in chosen_nodes_indices) \
+            if (mask_node_index in already_marked_nodes_indices) \
                     or \
                     (not is_neighbor(graph, mask_node_index, chosen_nodes_indices)):
                 mask_scores[mask_node_index] = irrelevant_mask_score_value
 
     @staticmethod
-    def get_most_prominent_mask_node(step_number, w_star, chosen_nodes_indices, composite_solver,
-                                       sub_graph, processed_sub_graph, reference_subgraph, use_magnitude: bool):
+    def get_relevant_mask_nodes_scores(w_star, chosen_nodes_indices, discarded_nodes_indices, composite_solver,
+                                       processed_sub_graph, reference_subgraph):
         magnitude_w_star_copy = np.copy(w_star)
         GreedySearchNodeClassifierSchemesServices.__mark_irrelevant_mask_node_entries(processed_sub_graph.G,
-                                                                           chosen_nodes_indices, magnitude_w_star_copy,
+                                                                           chosen_nodes_indices, discarded_nodes_indices, magnitude_w_star_copy,
                                                                            is_arg_max_score_mode=True)
-        magnitude_chosen_subgraph_node_index = np.argmax(magnitude_w_star_copy.reshape(-1))
 
         grad_w_star_copy = torch.tensor(w_star, requires_grad=True)
         updated_w_star_loss = composite_solver.solve_using_external_params(grad_w_star_copy, processed_sub_graph.A_full,
@@ -50,22 +49,65 @@ class GreedySearchNodeClassifierSchemesServices:
                                           allow_unused=True)[0]
 
         GreedySearchNodeClassifierSchemesServices.__mark_irrelevant_mask_node_entries(processed_sub_graph.G,
-                                                                           chosen_nodes_indices, w_mask_grad,
+                                                                           chosen_nodes_indices, discarded_nodes_indices, w_mask_grad,
                                                                            is_arg_max_score_mode=False)
-        grad_chosen_subgraph_node_index = torch.argmin(w_mask_grad.reshape(-1)).item()
+
+        return magnitude_w_star_copy, w_mask_grad
+
+    @staticmethod
+    def get_most_prominent_mask_node(step_number, w_star, chosen_nodes_indices, discarded_nodes_indices, composite_solver,
+                                       sub_graph, processed_sub_graph, reference_subgraph, use_magnitude: bool):
+        magnitude_w_star_copy, w_mask_grad = GreedySearchNodeClassifierSchemesServices.get_relevant_mask_nodes_scores(
+            w_star, chosen_nodes_indices, discarded_nodes_indices, composite_solver,
+            processed_sub_graph, reference_subgraph)
 
         # decide on the most prominent mask node entry (according to grad/how binary it is/magnitude)
         if use_magnitude:
-            chosen_subgraph_node_index = magnitude_chosen_subgraph_node_index
+            chosen_subgraph_node_index = np.argmax(magnitude_w_star_copy.reshape(-1))
         else:
-            chosen_subgraph_node_index = grad_chosen_subgraph_node_index
+            chosen_subgraph_node_index = torch.argmin(w_mask_grad.reshape(-1)).item()
 
-        MaskDebugger.debug_mask_scores(sub_graph, processed_sub_graph, chosen_nodes_indices,
+        MaskDebugger.debug_mask_scores(sub_graph, processed_sub_graph, chosen_nodes_indices, discarded_nodes_indices,
                                                          step_number,
                                                          chosen_subgraph_node_index,
                                                          [magnitude_w_star_copy, w_mask_grad])
 
         return chosen_subgraph_node_index
+
+    @staticmethod
+    def get_best_nodes_and_worst_nodes(w_star, chosen_nodes_indices, discarded_nodes_indices, composite_solver,
+                                       processed_sub_graph, reference_subgraph, use_magnitude: bool,
+                                       best_nodes_num, worst_nodes_num):
+        magnitude_w_star_copy, w_mask_grad = GreedySearchNodeClassifierSchemesServices.get_relevant_mask_nodes_scores(
+            w_star, chosen_nodes_indices, discarded_nodes_indices, composite_solver,
+            processed_sub_graph, reference_subgraph)
+
+        # decide on the best mask node entries and the worst ones (according to grad/how binary it is/magnitude)
+        n = len(processed_sub_graph.G)
+        if best_nodes_num == 0:
+            top_k_slice_start_index = 0
+            top_k_slice_end_index = 0
+        elif best_nodes_num == n:
+            top_k_slice_start_index = 0
+            top_k_slice_end_index = n
+        else:
+            top_k_slice_start_index = n - best_nodes_num
+            top_k_slice_end_index = n
+
+        if use_magnitude:
+            magnitude_array_sorted_indices = np.argsort(magnitude_w_star_copy.reshape(-1))
+            # Top-k items
+            top_k_indices = magnitude_array_sorted_indices[top_k_slice_start_index: top_k_slice_end_index]
+            # Worst-m items
+            worst_m_indices = magnitude_array_sorted_indices[:worst_nodes_num]
+        else:
+            grad_tensor = w_mask_grad.reshape(-1)
+            # Top-k items
+            top_k_indices = torch.topk(-grad_tensor, best_nodes_num).indices
+            # Worst-m items
+            worst_m_indices = torch.topk(grad_tensor, worst_nodes_num).indices
+
+        return top_k_indices.tolist(), worst_m_indices.tolist()
 
     @staticmethod
     def measure_stepwise_binarization_progress(sub_graph, processed_sub_graph, num_steps, step_number,
