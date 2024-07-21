@@ -214,7 +214,7 @@ class NodesNumberVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDete
         return "nodes number analysis"
 
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
-        return len(curr_subgraph) >= self.nodes_number
+        return len(curr_subgraph) >= self.target_nodes_number
 
     def run(self, g_full: nx.Graph, g_sub: nx.Graph, max_n_nodes):
         original_g_sub = g_sub.copy()
