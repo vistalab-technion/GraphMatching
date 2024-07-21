@@ -1,5 +1,7 @@
 from enum import Enum
 
+import networkx as nx
+
 from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_node_classifier_network import \
     GANNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.classification_layer import \
@@ -31,19 +33,20 @@ class NodeClassifierNetworkType(Enum):
 
 class NodeClassifierNetworkFactory:
 
-    @staticmethod
-    def create_node_classifier_network(processed_G, last_layer_type: NodeClassifierLastLayerType,
-                                       node_classifier_network_type: NodeClassifierNetworkType, params):
-        device = params['device']
-        num_workers = params.get('num_workers', 0)
+    def __init__(self, last_layer_type: NodeClassifierLastLayerType,
+                                       node_classifier_network_type: NodeClassifierNetworkType, params, hidden_dim = 20):
+        self.last_layer_type = last_layer_type
+        self.node_classifier_network_type = node_classifier_network_type
+        self.params = params
+        self.hidden_dim = hidden_dim
 
-        input_dim = len(processed_G.nodes())
-        hidden_dim = 20
-        output_dim = len(processed_G.nodes())
+    def __create_last_layer(self):
+        last_layer_type = self.last_layer_type
+
         if last_layer_type == NodeClassifierLastLayerType.Identity:
             last_layer = IdentityClassificationLayer()
         elif last_layer_type == NodeClassifierLastLayerType.TopKSoftmax:
-            last_layer = TopkSoftmaxClassificationLayer(k=params["m"], default_temp=0.1, learnable_temp=False)
+            last_layer = TopkSoftmaxClassificationLayer(k=self.params["m"], default_temp=0.1, learnable_temp=False)
         elif last_layer_type == NodeClassifierLastLayerType.Sigmoid:
             last_layer = SigmoidClassificationLayer()
         elif last_layer_type == NodeClassifierLastLayerType.Softmax:
@@ -52,6 +55,19 @@ class NodeClassifierNetworkFactory:
             last_layer = SquaredNormalizedClassificationLayer()
         else:
             raise ValueError(f"Unsupported layer type: {last_layer_type}")
+        return last_layer
+
+    def create(self, processed_G: nx.Graph):
+        device = self.params['device']
+        num_workers = self.params.get('num_workers', 0)
+
+        params = self.params
+        node_classifier_network_type = self.node_classifier_network_type
+        input_dim = len(processed_G.nodes())
+        hidden_dim = self.hidden_dim
+        output_dim = len(processed_G.nodes())
+
+        last_layer = self.__create_last_layer()
 
         if node_classifier_network_type == NodeClassifierNetworkType.NN:
             node_classifier_network = NNNodeClassifierNetwork(input_dim=input_dim,

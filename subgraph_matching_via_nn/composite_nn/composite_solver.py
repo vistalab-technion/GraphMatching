@@ -417,3 +417,12 @@ class BaseCompositeSolver(PickleSupportedCompositeSolver):
         x0 = torch.tensor(x0 / x0.sum(), device=device)
         self.composite_nn.node_classifier_network.init_params(default_weights=x0)
         return x0
+
+
+def build_composite_solver(embedding_nns, embedding_metric_nn, node_classifier_network, graph_processor, params, device):
+    composite_nn = CompositeNeuralNetwork(node_classifier_network=node_classifier_network,
+                                      embedding_networks=embedding_nns,
+                                      device=device)
+    composite_solver = BaseCompositeSolver(composite_nn, embedding_metric_nn, graph_processor, params)
+
+    return composite_solver

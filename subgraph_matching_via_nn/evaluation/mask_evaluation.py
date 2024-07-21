@@ -14,13 +14,13 @@ from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator_given_subgraph_nodes
 
 
-def is_connected_subgraph(full_graph, binary_w):
+def induced_subgraph(full_graph, binary_w):
     sampled_nodes = np.nonzero(binary_w.reshape(-1)).flatten().tolist()
     # sampled_nodes = np.nonzero(binary_w)[0]
     subgraph = full_graph.subgraph(sampled_nodes)
-    print(subgraph.nodes)
-    print(subgraph.edges)
-    return subgraph, nx.is_connected(subgraph)
+    # print(subgraph.nodes)
+    # print(subgraph.edges)
+    return subgraph
 
 
 def evaluate_mask_performance(w_bin, gt_node_distribution_processed):
