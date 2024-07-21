@@ -97,8 +97,8 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
         # add node features according to full graph
         # pick full graph node in random, and take the features from it
         random_full_graph_node_id = list(full_graph.nodes)[random.randint(0, len(full_graph) - 1)]
+        random_node_attributes = full_graph.nodes(data=True)[random_full_graph_node_id]
 
-        random_node_attributes = subgraph.nodes(data=True)[random_full_graph_node_id]
         new_node_attributes = subgraph.nodes(data=True)[node_id]
 
         for feature_name, feature_val in random_node_attributes.items():
