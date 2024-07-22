@@ -62,7 +62,8 @@ class SimilarityMetricTrainerBase(abc.ABC):
     def _training_worker_run_func(self, device_id, q, train_loader_path, val_loader_path):
         self.device = device_id
         self.solver_params['device'] = device_id
-        self.composite_solver.params['device'] = device_id
+        if self.composite_solver is not None:
+            self.composite_solver.params['device'] = device_id
 
         print(f"device={device_id}")
 
@@ -551,7 +552,7 @@ class SimilarityMetricTrainerBase(abc.ABC):
                           else self.get_grad_distance(pair, pair.localization_state_object)
                           for pair in samples]
 
-        grad_distance_term_factor = self.solver_params['grad_distance_term_factor']
+        grad_distance_term_factor = self.solver_params.get('grad_distance_term_factor', 0)
         grad_distances = [elem * grad_distance_term_factor for elem in grad_distances]
         
         is_negative_sample_flags = [pair.is_negative_sample for pair in samples]

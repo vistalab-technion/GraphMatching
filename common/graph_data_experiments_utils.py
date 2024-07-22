@@ -448,12 +448,14 @@ def remove_isolated_nodes_from_graph(graph:nx.Graph):
 def create_k_subgraphs_for_circuit(circuit_base_dir, circuit_file_name, is_parallel, to_line:bool):
     g_file_rel_path = 'full_graph.p'
     g_sub_file_rel_path = 'subgraph0.p'
+    is_use_features = False
 
     circuit_dir = f"{circuit_base_dir}{circuit_file_name}{os.sep}"
     loader_params = {
      'data_path' : str(circuit_dir),
      'g_full_path': g_file_rel_path,
-     'g_sub_path': g_sub_file_rel_path}
+     'g_sub_path': g_sub_file_rel_path,
+    'is_use_features': is_use_features}
     
     sub_graph = \
         load_graph(type='subcircuit',
