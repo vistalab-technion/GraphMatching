@@ -81,7 +81,10 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
 
     def _save_results(self, results_map):
         experiment_header = self._get_experiment_header()
-        with open(f"{experiment_header}_{self.subgraph_instance_name}.txt", 'wb') as f:
+        dump_path = f"{experiment_header}_{self.subgraph_instance_name}.txt"
+        if not os.path.exists(dump_path):
+            os.makedirs(dump_path)
+        with open(dump_path, 'wb') as f:
             pickle.dump(results_map, f)
 
     @abstractmethod
@@ -167,7 +170,7 @@ class DiameterVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDetecti
         self._log_message(log_message)
 
     def _get_experiment_header(self):
-        return "diameter analysis"
+        return "diameter_analysis"
 
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
         return nx.diameter(curr_subgraph) >= self.target_diameter
@@ -211,7 +214,7 @@ class NodesNumberVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDete
         self._log_message(log_message)
 
     def _get_experiment_header(self):
-        return "nodes number analysis"
+        return "nodes_number_analysis"
 
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
         return len(curr_subgraph) >= self.target_nodes_number
