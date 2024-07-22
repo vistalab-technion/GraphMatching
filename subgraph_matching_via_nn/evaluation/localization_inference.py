@@ -46,7 +46,7 @@ class LocalizationInference:
                                                                                   self.original_reference_subgraph)
 
         # this code should align with the binarization API we have, refactor in the future
-        if binarization_type == IndicatorBinarizationType.greedy_stepwise_mwksp:
+        if binarization_type == IndicatorBinarizationType.greedy_stepwise:
             best_quantile = self.params['greedy_search_node_classifier_best_quantile']
             worst_quantile = self.params['greedy_search_node_classifier_worst_quantile']
             w_rounded = greedy_search_node_classifier_schemes.greedy_stepwise_binarization(w_star, use_magnitude=True,

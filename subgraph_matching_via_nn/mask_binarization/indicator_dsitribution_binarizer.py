@@ -22,7 +22,7 @@ class IndicatorBinarizationType(Enum):
     zoomout = 4,
     nonlinear_zoomout = 5,
     mwksp = 6,
-    greedy_stepwise_mwksp = 7,
+    greedy_stepwise = 7,
     simulated_greedy_stepwise = 8,
 
 
