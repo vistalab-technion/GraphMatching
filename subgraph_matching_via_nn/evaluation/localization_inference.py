@@ -132,6 +132,7 @@ class LocalizationInference:
         variable_dict = {'f_beta_score': f_beta_score, 'is_connected': is_connected,
                          'correctly_captured_nodes_number': correctly_captured_nodes_number,
                          'overlap_cdf_score': overlap_cdf_score, 'hausdorff_relative_distance': hausdorff_relative_distance,
-                         'hausdorff_relative_distance_cdf_score': hausdorff_relative_distance_cdf_score}
+                         'hausdorff_relative_distance_cdf_score': hausdorff_relative_distance_cdf_score,
+                         'binarized_solution': binarized_solution}
 
         return variable_dict
