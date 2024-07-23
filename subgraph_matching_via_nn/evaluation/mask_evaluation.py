@@ -17,6 +17,10 @@ from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator_given_
 def induced_subgraph(full_graph, binary_w):
     sampled_nodes = np.nonzero(binary_w.reshape(-1)).flatten().tolist()
     # sampled_nodes = np.nonzero(binary_w)[0]
+
+    full_graph_nodes = list(full_graph.nodes)
+    sampled_nodes = [full_graph_nodes[i] for i in sampled_nodes]
+
     subgraph = full_graph.subgraph(sampled_nodes)
     # print(subgraph.nodes)
     # print(subgraph.edges)
