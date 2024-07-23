@@ -58,9 +58,9 @@ def measure_k_subgraph_num_correct_nodes(graph, gt_binary_mask, k_subgraph_origi
 class CDFScoreService:
 
     @staticmethod
-    def calculate_cdf(histogram_map):
+    def calculate_cdf(histogram_map, is_complement=False):
         # Step 1: Sort the histogram keys
-        sorted_keys = sorted(histogram_map.keys())
+        sorted_keys = sorted(histogram_map.keys(), reverse=is_complement)
 
         # Step 2: Calculate the cumulative count
         cumulative_counts = []
@@ -94,6 +94,7 @@ class ConnectedInducedSubgraphCDFScore(ABC):
 
     def __init__(self, sub_graph: SubGraph):
         self.sub_graph = sub_graph
+        self.is_complement_score = False
 
     def _log_cdf_histogram(self, ordered_cdf_map):
         pass
@@ -111,7 +112,8 @@ class ConnectedInducedSubgraphCDFScore(ABC):
                                                                                        k_subgraphs_original_nodes)
 
         # compute CDF score
-        ordered_cdf_map = CDFScoreService.calculate_cdf(metric_val_to_num_k_subgraphs_map)
+        ordered_cdf_map = CDFScoreService.calculate_cdf(metric_val_to_num_k_subgraphs_map,
+                                                        is_complement=self.is_complement_score)
         self._log_cdf_histogram(ordered_cdf_map)
 
         cdf_score = CDFScoreService.get_cdf_score(ordered_cdf_map, cdf_query_value)
@@ -197,6 +199,7 @@ class ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore(ConnectedInduced
 
     def __init__(self, sub_graph: SubGraph):
         super(ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore, self).__init__(sub_graph)
+        self.is_complement_score = True
 
     @overrides
     def _log_cdf_histogram(self, ordered_cdf_map):
