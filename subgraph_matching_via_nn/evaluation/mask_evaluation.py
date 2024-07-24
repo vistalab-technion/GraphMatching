@@ -82,10 +82,16 @@ class CDFScoreService:
         return {key: cdf_val for key, cdf_val in zip(sorted_keys, cdf)}
 
     @staticmethod
-    def get_cdf_score(ordered_cdf_map: Dict, x: float):
+    def get_cdf_score(ordered_cdf_map: Dict, x: float, is_complement: bool):
         cdf_score = 0
+
+        basic_key_comparison_condition = lambda x, key: x < key
+        key_comparison_condition = basic_key_comparison_condition
+        if is_complement:
+            key_comparison_condition = lambda x, key: not basic_key_comparison_condition(x, key)
+
         for key, cdf_value in ordered_cdf_map.items():
-            if x < key:
+            if key_comparison_condition(x, key):
                 break
             cdf_score = cdf_value
 
@@ -120,7 +126,7 @@ class ConnectedInducedSubgraphCDFScore(ABC):
                                                         is_complement=self.is_complement_score)
         self._log_cdf_histogram(ordered_cdf_map)
 
-        cdf_score = CDFScoreService.get_cdf_score(ordered_cdf_map, cdf_query_value)
+        cdf_score = CDFScoreService.get_cdf_score(ordered_cdf_map, cdf_query_value, is_complement=self.is_complement_score)
 
         return cdf_score
 
