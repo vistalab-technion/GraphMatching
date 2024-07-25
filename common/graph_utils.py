@@ -168,8 +168,12 @@ class SubGraphGenerator:
             chunks_amount = 1
 
         chunk_size = int(math.ceil(n / chunks_amount))
+        chunk_size = min(chunk_size, 8_192) #cap to avoid memory and timeout issues
+        # according to chunk size, recalculate chnuks_amount
+        chunks_amount = int(math.ceil(n / chunk_size))
+
         curr_time = TimeLogging.log_time(curr_time, f"finished all_connected_subgraphs (total of {n} graphs)")
-        
+
         chunks = [all_connected_subgraphs_nodes_lists[i*chunk_size: min(i*chunk_size + chunk_size, n)] for i in range(chunks_amount)]
 
         if is_parallel:

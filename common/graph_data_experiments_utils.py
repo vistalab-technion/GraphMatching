@@ -536,6 +536,9 @@ def generate_pairs_data_set_based_on_graphs(k_subgraph_annotated_graphs, output_
     n = len(k_subgraph_annotated_graphs)
     chunks_amount = cpu_num
     chunk_size = int(math.ceil(n / chunks_amount))
+    chunk_size = min(chunk_size, 8_192)  # cap to avoid memory and timeout issues
+    # according to chunk size, recalculate chnuks_amount
+    chunks_amount = int(math.ceil(n / chunk_size))
 
     base_graph_chunks_indices = [(chunk_index * chunk_size, min(chunk_index * chunk_size + chunk_size, n)) for
                                  chunk_index in range(0, chunks_amount)]
