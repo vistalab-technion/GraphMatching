@@ -2,8 +2,8 @@ from enum import Enum
 
 import networkx as nx
 
-from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_node_classifier_network import \
-    GANNodeClassifierNetwork
+# from subgraph_matching_via_nn.graph_classifier_networks.GAN_node_classifier.gan_node_classifier_network import \
+#     GANNodeClassifierNetwork
 from subgraph_matching_via_nn.graph_classifier_networks.classification_layer.classification_layer import \
     TopkSoftmaxClassificationLayer, SigmoidClassificationLayer, SoftmaxClassificationLayer, \
     SquaredNormalizedClassificationLayer, IdentityClassificationLayer
