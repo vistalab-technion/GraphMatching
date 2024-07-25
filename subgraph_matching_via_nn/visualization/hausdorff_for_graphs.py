@@ -105,8 +105,8 @@ if __name__ == "__main__":
     # Function to compute subgraph localization accuracy score
 
     loader_params = {'data_path': DATA_PATH,
-                     'g_full_path': 'comp1_4\\full_graph.p',
-                     'g_sub_path': 'comp1_4\\subgraph0.p',
+                     'g_full_path': f'comp1_4{os.sep}full_graph.p',
+                     'g_sub_path': f'comp1_4{os.sep}subgraph0.p',
                      'is_use_features': False,
                      'graph_size': 16,
                      'subgraph_size': 2}
