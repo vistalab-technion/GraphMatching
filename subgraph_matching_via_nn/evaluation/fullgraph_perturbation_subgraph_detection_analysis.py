@@ -16,8 +16,7 @@ from subgraph_matching_via_nn.graph_processors.graph_processors import GraphProc
 
 class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
     def __init__(self, composite_solver, node_classifier_factory: NodeClassifierNetworkFactory, params, plot_services,
-                 binarization_type, series_binarization_func, use_full_graph_edges: bool,
-                 subgraph_instance_name: str = "General"):
+                 binarization_type, series_binarization_func, use_full_graph_edges: bool, dump_path: str):
         super(FullGraphPerturbationVsSubgraphDetectionAnalysis, self).__init__()
         self.composite_solver = composite_solver
         self.params = params
@@ -26,7 +25,7 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
         self.series_binarization_func = series_binarization_func
         self.use_full_graph_edges = use_full_graph_edges
         self.node_classifier_factory = node_classifier_factory
-        self.subgraph_instance_name = subgraph_instance_name
+        self.dump_path = dump_path
 
     def _create_localization_inference_instance(self, g, g_sub):
         # prepare experiment object
@@ -75,13 +74,8 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
         scores_map = localization_inference_instance.experiment_scores_evaluation(binarized_solution=w_rounded)
         return scores_map
 
-    @abstractmethod
-    def _get_experiment_header(self):
-        pass
-
     def _save_results(self, results_map):
-        experiment_header = self._get_experiment_header()
-        dump_path = f"{experiment_header}_{self.subgraph_instance_name}.txt"
+        dump_path = self.dump_path
         if not os.path.exists(dump_path):
             dir_path = os.path.dirname(dump_path)
             os.makedirs(dir_path)
@@ -159,19 +153,15 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
 class DiameterVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDetectionAnalysis):
 
     def __init__(self, composite_solver, node_classifier_factory: NodeClassifierNetworkFactory, params, plot_services,
-                 binarization_type, series_binarization_func, use_full_graph_edges: bool,
-                 subgraph_instance_name: str = "General"):
+                 binarization_type, series_binarization_func, use_full_graph_edges: bool, dump_path: str):
         super(DiameterVsSubgraphDetectionAnalysis, self).__init__(composite_solver, node_classifier_factory, params,
                                                                   plot_services, binarization_type, series_binarization_func,
-                                                                  use_full_graph_edges, subgraph_instance_name)
+                                                                  use_full_graph_edges, dump_path)
         self.target_diameter = -1
 
     def __log(self, current_diameter, max_diameter):
         log_message = f"current diameter = {current_diameter}; max diameter = {max_diameter}"
         self._log_message(log_message)
-
-    def _get_experiment_header(self):
-        return "diameter_analysis"
 
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
         return nx.diameter(curr_subgraph) >= self.target_diameter
@@ -203,19 +193,15 @@ class DiameterVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDetecti
 class NodesNumberVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDetectionAnalysis):
 
     def __init__(self, composite_solver, node_classifier_factory: NodeClassifierNetworkFactory, params, plot_services,
-                 binarization_type, series_binarization_func, use_full_graph_edges: bool,
-                 subgraph_instance_name: str = "General"):
+                 binarization_type, series_binarization_func, use_full_graph_edges: bool, dump_path: str):
         super(NodesNumberVsSubgraphDetectionAnalysis, self).__init__(composite_solver, node_classifier_factory, params,
                                                                   plot_services, binarization_type, series_binarization_func,
-                                                                  use_full_graph_edges, subgraph_instance_name)
+                                                                  use_full_graph_edges, dump_path)
         self.target_nodes_number = -1
 
     def __log(self, current_n_nodes, max_n_nodes):
         log_message = f"current #nodes = {current_n_nodes}; max #nodes = {max_n_nodes}"
         self._log_message(log_message)
-
-    def _get_experiment_header(self):
-        return "nodes_number_analysis"
 
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
         return len(curr_subgraph) >= self.target_nodes_number
