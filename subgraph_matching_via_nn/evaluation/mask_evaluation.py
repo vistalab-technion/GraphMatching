@@ -156,7 +156,7 @@ class ConnectedInducedSubgraphCDFScore(ABC):
             chunks_amount = 1
 
         chunk_size = int(math.ceil(n / chunks_amount))
-        chunk_size = min(chunk_size, 8_192)  # cap to avoid memory and timeout issues
+        chunk_size = min(chunk_size, 4 * 8_192)  # cap to avoid memory and timeout issues
         # according to chunk size, recalculate chnuks_amount
         chunks_amount = int(math.ceil(n / chunk_size))
 
