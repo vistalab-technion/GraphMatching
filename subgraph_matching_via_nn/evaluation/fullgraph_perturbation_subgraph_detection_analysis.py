@@ -76,8 +76,8 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
 
     def _save_results(self, results_map):
         dump_path = self.dump_path
-        if not os.path.exists(dump_path):
-            dir_path = os.path.dirname(dump_path)
+        dir_path = os.path.dirname(dump_path)
+        if not os.path.exists(dir_path):
             os.makedirs(dir_path)
         with open(dump_path, 'wb') as f:
             pickle.dump(results_map, f)
