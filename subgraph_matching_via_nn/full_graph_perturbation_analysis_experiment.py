@@ -92,8 +92,8 @@ def set_experiment_folder(experiment_header, experiment_id, experiment_config_ma
         os.makedirs(dir_path)
 
     # save config file
-    experiment_results_path = f"{dump_path}config.p"
-    with open(experiment_results_path, 'wb') as f:
+    experiment_config_path = f"{dump_path}config.p"
+    with open(experiment_config_path, 'wb') as f:
         pickle.dump(experiment_config_map, f)
 
     return experiment_results_path
