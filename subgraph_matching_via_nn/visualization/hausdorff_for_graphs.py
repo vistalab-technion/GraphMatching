@@ -15,7 +15,7 @@ from subgraph_matching_via_nn.evaluation.mask_evaluation import compute_relative
 from subgraph_matching_via_nn.graph_generators.util import sample_connected_subgraph
 
 
-def plot_cdf(cdf_map, localized_subgraph_score):
+def plot_cdf(cdf_map, localized_subgraph_score, x_label):
     # Example CDF data, replace with your actual CDF data
     hausdorff_distances = list(cdf_map.keys())
     cdf_values = list(cdf_map.values())
@@ -24,20 +24,22 @@ def plot_cdf(cdf_map, localized_subgraph_score):
     input_distance = localized_subgraph_score
     input_cdf_value = cdf_map[input_distance]
 
+    input_cdf_value = round(input_cdf_value * 100) / 100
+
     # Plotting the CDF
     plt.figure(figsize=(8, 6))
     plt.plot(hausdorff_distances, cdf_values, marker='o', linestyle='-', color='b', label='CDF')
-    plt.xlabel('Subgraph Relative Hausdorff Distance')
-    plt.ylabel('CDF Value')
-    plt.title('CDF Map of Subgraph Recognition')
+    plt.xlabel(x_label, fontsize=18)
+    plt.ylabel('CDF Value', fontsize=18)
+    plt.title('subgraph recognition overlap CDF', fontsize=18)
 
     # Marking the specific point
     plt.scatter(input_distance, input_cdf_value, color='r')
     plt.text(input_distance, input_cdf_value, f'({input_distance}, {input_cdf_value})', color='r', ha='right')
 
     # Show the plot
-    plt.grid(True)
-    plt.legend()
+    # plt.grid(True)
+    # plt.legend()
     plt.show()
 
 def generate_example_graph(base_node_id, actual_subgraph, target_subgraph):
@@ -107,8 +109,8 @@ if __name__ == "__main__":
     # Function to compute subgraph localization accuracy score
 
     loader_params = {'data_path': DATA_PATH,
-                     'g_full_path': f'comp1_4{os.sep}full_graph.p',
-                     'g_sub_path': f'comp1_4{os.sep}subgraph0.p',
+                     'g_full_path': f'comp1_2{os.sep}full_graph.p',
+                     'g_sub_path': f'comp1_2{os.sep}subgraph0.p',
                      'is_use_features': False,
                      'graph_size': 16,
                      'subgraph_size': 2}
@@ -276,6 +278,6 @@ if __name__ == "__main__":
     # demonstrate CDF histogram meaning
     calculate_cdf_scores(sub_graph, original_G, actual_subgraph)
 
-    #TODO
-    # plot_cdf(rel)
-    # plot_cdf(rel)
+    overlap_cdf_map = None #replace by histogram, e.g. {0.0: 0.00012014898474107894, 1.0: 0.0030037246185269733, 2.0: 0.054667788057190914, 3.0: 0.2864351796227322, 4.0: 0.668268653129881, 5.0: 0.9276703111858705, 6.0: 0.9951940406103569, 7.0: 0.9998798510152589, 8.0: 1.0}
+    overlap_score = None #replace by score, e.g. 3
+    plot_cdf(overlap_cdf_map, localized_subgraph_score=overlap_score, x_label='k-subgraph overlap nodes score')
