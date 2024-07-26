@@ -86,32 +86,42 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
     def _perturbation_stoppage_criteria(self, curr_subgraph: nx.Graph):
         pass
 
-    def __add_node_to_subgraph(self, subgraph: nx.Graph, node_id, full_graph):
-        subgraph.add_node(node_id)
+    def __get_random_node(self, graph):
+        return list(graph.nodes)[random.randint(0, len(graph) - 1)]
 
-        if full_graph is None:
-            return
+    def __add_node_to_subgraph(self, original_subgraph: nx.Graph, cur_subgraph: nx.Graph, new_node_id: int,
+                               full_graph: nx.Graph):
+        if full_graph is not None:
+            # check if node_id is original or not
+            if new_node_id in full_graph.nodes:
+                full_graph_features_node_id = new_node_id
+            else:
+                full_graph_features_node_id = self.__get_random_node(full_graph)
 
-        # add node features according to full graph
-        # pick full graph node in random, and take the features from it
-        random_full_graph_node_id = list(full_graph.nodes)[random.randint(0, len(full_graph) - 1)]
-        random_node_attributes = full_graph.nodes(data=True)[random_full_graph_node_id]
+            # add node features according to full graph
+            chosen_node_attributes = full_graph.nodes(data=True)[full_graph_features_node_id]
+        else:
+            # choose from original subgraph
+            original_subgraph_features_node_id = self.__get_random_node(original_subgraph)
+            chosen_node_attributes = original_subgraph.nodes(data=True)[original_subgraph_features_node_id]
 
-        new_node_attributes = subgraph.nodes(data=True)[node_id]
+        cur_subgraph.add_node(new_node_id)
 
-        for feature_name, feature_val in random_node_attributes.items():
+        # set new node features
+        new_node_attributes = cur_subgraph.nodes(data=True)[new_node_id]
+        for feature_name, feature_val in chosen_node_attributes.items():
             new_node_attributes[feature_name] = feature_val
 
-    def __perturb_subgraph_via_new_edges(self, subgraph):
+    def __perturb_subgraph_via_new_edges(self, subgraph, original_subgraph, full_graph):
         nodes = list(subgraph.nodes)
         while True:
             new_node = max(subgraph.nodes) + 1
-            self.__add_node_to_subgraph(subgraph, new_node, full_graph=None)
+            self.__add_node_to_subgraph(original_subgraph, subgraph, new_node, full_graph=full_graph)
             subgraph.add_edge(np.random.choice(nodes), new_node)
             if self._perturbation_stoppage_criteria(subgraph):
                 break
 
-    def _perturb_subgraph(self, subgraph, full_graph=None):
+    def _perturb_subgraph(self, subgraph, original_subgraph, full_graph=None):
         """
         Increase the diameter of the graph using nodes and edges from G,
         and then add new nodes and edges once G is fully utilized.
@@ -127,13 +137,13 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
                 if u not in nodes_in_graph or v not in nodes_in_graph:
                     subgraph.add_edge(u, v)
                     if u not in nodes_in_graph:
-                        self.__add_node_to_subgraph(subgraph, u, full_graph)
+                        self.__add_node_to_subgraph(original_subgraph, subgraph, u, full_graph)
                     if v not in nodes_in_graph:
-                        self.__add_node_to_subgraph(subgraph, v, full_graph)
+                        self.__add_node_to_subgraph(original_subgraph, subgraph, v, full_graph)
                     if self._perturbation_stoppage_criteria(subgraph):
                         return
 
-        self.__perturb_subgraph_via_new_edges(subgraph)
+        self.__perturb_subgraph_via_new_edges(subgraph, original_subgraph, full_graph=full_graph)
 
     def _localize_and_measure_detection(self, current_g_sub, original_g_sub):
         localization_inference_instance = self._create_localization_inference_instance(current_g_sub, original_g_sub)
@@ -182,7 +192,7 @@ class DiameterVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDetecti
             self.__log(current_diameter, max_diameter)
 
             self.target_diameter = current_diameter + 1
-            self._perturb_subgraph(current_graph, full_graph=g_full)
+            self._perturb_subgraph(current_graph, original_g_sub, full_graph=g_full)
             current_diameter = nx.diameter(current_graph)
 
         self._save_results(results)
@@ -222,7 +232,7 @@ class NodesNumberVsSubgraphDetectionAnalysis(FullGraphPerturbationVsSubgraphDete
             self.__log(current_n_nodes, max_n_nodes)
 
             self.target_nodes_number = current_n_nodes + 1
-            self._perturb_subgraph(current_graph, full_graph=g_full)
+            self._perturb_subgraph(current_graph, original_g_sub, full_graph=g_full)
             current_n_nodes = len(current_graph)
 
         self._save_results(results)
