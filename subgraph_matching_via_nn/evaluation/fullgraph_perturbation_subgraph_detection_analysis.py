@@ -134,7 +134,9 @@ class FullGraphPerturbationVsSubgraphDetectionAnalysis(ABC):
         if self.use_full_graph_edges:
             # Add nodes and edges from G until all are used or diameter increases
             for u, v in full_graph.edges:
-                if u not in nodes_in_graph or v not in nodes_in_graph:
+                u_flag = u not in nodes_in_graph
+                v_flag = v not in nodes_in_graph
+                if u_flag ^ v_flag:
                     subgraph.add_edge(u, v)
                     if u not in nodes_in_graph:
                         self.__add_node_to_subgraph(original_subgraph, subgraph, u, full_graph)
