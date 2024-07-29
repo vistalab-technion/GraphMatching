@@ -45,8 +45,8 @@ def compute_relative_hausdorff_distance_to_target_subgraph(full_graph, target_su
     for source_node in actual_subgraph_nodes:
         shortest_path_distances[source_node] = nx.single_source_shortest_path_length(full_graph, source_node)
 
-    max_distance = max(shortest_path_distances[node][target_node]
-                       for node in actual_subgraph_nodes for target_node in target_subgraph)
+    max_distance = max(min([shortest_path_distances[node][target_node] for target_node in target_subgraph])
+                       for node in actual_subgraph_nodes)
 
     diameter = nx.diameter(full_graph)
     alpha = max_distance / diameter
