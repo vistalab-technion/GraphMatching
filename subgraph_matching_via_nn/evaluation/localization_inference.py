@@ -7,6 +7,7 @@ from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.evaluation.localization_inference_scorer import FBetaLocalizationInferenceScorer, \
     ConnectivityLocalizationInferenceScorer, OverlapNodesCDFLocalizationInferenceScorer, \
     RelativeHausdorffDistanceCDFLocalizationInferenceScorer
+from subgraph_matching_via_nn.evaluation.mask_metrics_constants import MaskMetricsConstants
 from subgraph_matching_via_nn.graph_classifier_networks.greedy_search_node_classifier_schemes import \
     GreedySearchNodeClassifierSchemes
 from subgraph_matching_via_nn.mask_binarization.indicator_dsitribution_binarizer import IndicatorBinarizationType, \
@@ -107,19 +108,21 @@ class LocalizationInference:
 
         # connectivity
         is_connected = self.connectivity_scorer.score(self.sub_graph, self.processed_sub_graph, normalized_binarized_solution)
-        print(f"is_connected_subgraph = {is_connected}")
+        print(f"{MaskMetricsConstants.IS_CONNECTED_SCORE_NAME} = {is_connected}")
 
         # CDF scores
         correctly_captured_nodes_number, overlap_cdf_score = self.overlap_nodes_cdf_scorer.score(
             self.sub_graph, self.processed_sub_graph, normalized_binarized_solution)
-        print(f"overlap nodes number= {correctly_captured_nodes_number}")
-        print(f"overlap nodes distance CDF score = {overlap_cdf_score}")
+        print(f"{MaskMetricsConstants.OVERLAP_NODES_SCORE_NAME}= {correctly_captured_nodes_number}")
+        print(f"{MaskMetricsConstants.OVERLAP_NODES_CDF_SCORE_NAME} = {overlap_cdf_score}")
 
         # Relative Hausdorff
-        hausdorff_relative_distance, hausdorff_relative_distance_cdf_score = self.rel_hausdorff_distance_cdf_scorer.score(
+        hausdorff_relative_similarity, hausdorff_relative_similarity_cdf_score = self.rel_hausdorff_distance_cdf_scorer.score(
             self.sub_graph, self.processed_sub_graph, normalized_binarized_solution)
-        print(f"Relative Hausdorff distance = {hausdorff_relative_distance}")
-        print(f"Relative Hausdorff distance CDF score = {hausdorff_relative_distance_cdf_score}")
+        print(f"{MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_SCORE_NAME} = "
+              f"{hausdorff_relative_similarity}")
+        print(f"{MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_CDF_SCORE_NAME} ="
+              f" {hausdorff_relative_similarity_cdf_score}")
 
         # show result
         processed_G = self.processed_sub_graph.G
@@ -129,10 +132,12 @@ class LocalizationInference:
         }
         self.plot_services.plot_subgraph_indicators(self.sub_graph.G, self.to_line, indicator_name_to_object_map)
 
-        variable_dict = {'f_beta_score': f_beta_score, 'is_connected': is_connected,
-                         'correctly_captured_nodes_number': correctly_captured_nodes_number,
-                         'overlap_cdf_score': overlap_cdf_score, 'hausdorff_relative_distance': hausdorff_relative_distance,
-                         'hausdorff_relative_distance_cdf_score': hausdorff_relative_distance_cdf_score,
-                         'binarized_solution': binarized_solution}
+        variable_dict = {MaskMetricsConstants.F_BETA_SCORE_NAME: f_beta_score,
+                         MaskMetricsConstants.IS_CONNECTED_SCORE_NAME: is_connected,
+                         MaskMetricsConstants.OVERLAP_NODES_SCORE_NAME: correctly_captured_nodes_number,
+                         MaskMetricsConstants.OVERLAP_NODES_CDF_SCORE_NAME: overlap_cdf_score,
+                         MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_SCORE_NAME: hausdorff_relative_similarity,
+                         MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_CDF_SCORE_NAME: hausdorff_relative_similarity_cdf_score,
+                         MaskMetricsConstants.BINARIZED_SOLUTION_RESULT_NAME: binarized_solution}
 
         return variable_dict

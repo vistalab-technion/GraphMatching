@@ -11,6 +11,7 @@ from common.graph_utils import SubGraphGenerator
 from common.logger import TimeLogging
 from metrics.accuracy_metrics import evaluate_binary_classifier
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
+from subgraph_matching_via_nn.evaluation.mask_metrics_constants import MaskMetricsConstants
 from subgraph_matching_via_nn.utils.graph_utils import get_node_indicator_given_subgraph_nodes
 
 
@@ -33,9 +34,8 @@ def evaluate_mask_performance(w_bin, gt_node_distribution_processed):
                                y_true= (gt_node_distribution_processed/max(gt_node_distribution_processed)).squeeze().numpy().astype(bool))
 
 
-def compute_relative_hausdorff_distance_to_target_subgraph(full_graph, target_subgraph, actual_subgraph,
-                                                           k_subgraph_nodes=None):
-    actual_subgraph_nodes = None
+def compute_relative_hausdorff_similarity_to_target_subgraph(full_graph, target_subgraph, actual_subgraph,
+                                                             k_subgraph_nodes=None):
     if k_subgraph_nodes is None:
         actual_subgraph_nodes = actual_subgraph.nodes
     else:
@@ -49,8 +49,8 @@ def compute_relative_hausdorff_distance_to_target_subgraph(full_graph, target_su
                        for node in actual_subgraph_nodes)
 
     diameter = nx.diameter(full_graph)
-    alpha = max_distance / diameter
-    return 1-alpha, shortest_path_distances
+    rel_distance = max_distance / diameter
+    return 1-rel_distance, shortest_path_distances
 
 
 def measure_k_subgraph_num_correct_nodes(graph, gt_binary_mask, k_subgraph_original_nodes):
@@ -138,12 +138,12 @@ class ConnectedInducedSubgraphCDFScore(ABC):
     def _measure_k_subgraph_metric_for_chunk(self, chunk_index, k_subgraphs_chunk, k_subgraph_original_nodes_chunk):
         curr_time = TimeLogging.log_time(None, "enter _measure_k_subgraph_metric_for_chunk")
 
-        metric_val = self._calculate_subgraph_metric(k_subgraphs_chunk, k_subgraph_original_nodes_chunk)
+        metric_vals = self._calculate_subgraph_metric(k_subgraphs_chunk, k_subgraph_original_nodes_chunk)
 
         curr_time = TimeLogging.log_time(curr_time, f"Chunk #{chunk_index} finished, "
                                                     f"chunk size={len(k_subgraphs_chunk)}")
         sys.stdout.flush()
-        return metric_val
+        return metric_vals
 
     def __calculate_subgraph_metric_histogram(self, k_subgraphs, k_subgraphs_original_nodes, is_parallel=True):
         n = len(k_subgraphs_original_nodes)
@@ -208,25 +208,25 @@ class ConnectedInducedSubgraphOverlapWithGTNodesCDFScore(ConnectedInducedSubgrap
         return chunk_num_correct_nodes
 
 
-class ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore(ConnectedInducedSubgraphCDFScore):
+class ConnectedInducedSubgraphRelativeHausdorffSimilarityCDFScore(ConnectedInducedSubgraphCDFScore):
     # CDF of relative Hausdorff distance to GT k subgraph
 
     def __init__(self, sub_graph: SubGraph):
-        super(ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore, self).__init__(sub_graph)
-        self.is_complement_score = True
+        super(ConnectedInducedSubgraphRelativeHausdorffSimilarityCDFScore, self).__init__(sub_graph)
+        self.is_complement_score = False
 
     @overrides
     def _log_cdf_histogram(self, ordered_cdf_map):
-        print(f"relative hausdorff distance CDF: {ordered_cdf_map}")
+        print(f"{MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_CDF_SCORE_NAME} map: {ordered_cdf_map}")
 
     @overrides
     def _calculate_subgraph_metric(self, k_subgraphs_chunk, k_subgraph_original_nodes_chunk):
         graph = self.sub_graph.G
         target_graph = self.sub_graph.G_sub
 
-        chunk_distances = [
-            compute_relative_hausdorff_distance_to_target_subgraph(graph, target_subgraph=target_graph,
-                                                                   actual_subgraph=k_subgraph,
-                                                                   k_subgraph_nodes=k_subgraph_original_nodes)[0]
+        chunk_metric_vals = [
+            compute_relative_hausdorff_similarity_to_target_subgraph(graph, target_subgraph=target_graph,
+                                                                     actual_subgraph=k_subgraph,
+                                                                     k_subgraph_nodes=k_subgraph_original_nodes)[0]
             for k_subgraph, k_subgraph_original_nodes in zip(k_subgraphs_chunk, k_subgraph_original_nodes_chunk)]
-        return chunk_distances
+        return chunk_metric_vals

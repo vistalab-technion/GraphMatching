@@ -11,7 +11,7 @@ from subgraph_matching_via_nn.data.data_loaders import load_graph
 from subgraph_matching_via_nn.data.paths import *
 from subgraph_matching_via_nn.evaluation.localization_inference_scorer import \
     RelativeHausdorffDistanceCDFLocalizationInferenceScorer, OverlapNodesCDFLocalizationInferenceScorer
-from subgraph_matching_via_nn.evaluation.mask_evaluation import compute_relative_hausdorff_distance_to_target_subgraph
+from subgraph_matching_via_nn.evaluation.mask_evaluation import compute_relative_hausdorff_similarity_to_target_subgraph
 from subgraph_matching_via_nn.graph_generators.util import sample_connected_subgraph
 
 
@@ -90,11 +90,11 @@ def calculate_cdf_scores(sub_graph, original_G, actual_subgraph):
     normalized_binarized_solution = get_normalized_node_indicator(binarized_solution, dtype=TORCH_DTYPE)\
                 .reshape(-1, 1)
     processed_sub_graph = sub_graph
-    hausdorff_relative_distance, hausdorff_relative_distance_cdf_score = rel_hausdorff_distance_cdf_scorer.score(
+    hausdorff_relative_similarity, hausdorff_relative_similarity_cdf_score = rel_hausdorff_distance_cdf_scorer.score(
         sub_graph, processed_sub_graph, normalized_binarized_solution)
 
-    print(hausdorff_relative_distance)
-    print(hausdorff_relative_distance_cdf_score)
+    print(hausdorff_relative_similarity)
+    print(hausdorff_relative_similarity_cdf_score)
 
     overlap_cdf_scorer = OverlapNodesCDFLocalizationInferenceScorer()
     overlap_score, overlap_cdf_score = overlap_cdf_scorer.score(sub_graph, processed_sub_graph, normalized_binarized_solution)
@@ -141,8 +141,8 @@ if __name__ == "__main__":
     G2, target_subgraph2, actual_subgraph2, target_only_nodes2, actual_only_nodes2, overlap_nodes2 =\
         generate_example_graph(base_node_id=len(G1), actual_subgraph=actual_subgraph, target_subgraph=target_subgraph)
 
-    alpha, shortest_path_distances_from_target = compute_relative_hausdorff_distance_to_target_subgraph(G2, target_subgraph2, actual_subgraph=None, k_subgraph_nodes=actual_subgraph2)
-    _, shortest_path_distances_to_target = compute_relative_hausdorff_distance_to_target_subgraph(G1, actual_subgraph1, actual_subgraph=None, k_subgraph_nodes=target_subgraph1)
+    alpha, shortest_path_distances_from_target = compute_relative_hausdorff_similarity_to_target_subgraph(G2, target_subgraph2, actual_subgraph=None, k_subgraph_nodes=actual_subgraph2)
+    _, shortest_path_distances_to_target = compute_relative_hausdorff_similarity_to_target_subgraph(G1, actual_subgraph1, actual_subgraph=None, k_subgraph_nodes=target_subgraph1)
 
     target_only_nodes = set(list(target_only_nodes1) + list(target_only_nodes2))
     actual_only_nodes = set(list(actual_only_nodes1) + list(actual_only_nodes2))

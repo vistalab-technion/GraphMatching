@@ -6,7 +6,7 @@ import numpy as np
 from subgraph_matching_via_nn.data.sub_graph import SubGraph
 from subgraph_matching_via_nn.evaluation.mask_evaluation import evaluate_mask_performance, induced_subgraph, \
     measure_k_subgraph_num_correct_nodes, ConnectedInducedSubgraphOverlapWithGTNodesCDFScore, \
-    compute_relative_hausdorff_distance_to_target_subgraph, ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore
+    compute_relative_hausdorff_similarity_to_target_subgraph, ConnectedInducedSubgraphRelativeHausdorffSimilarityCDFScore
 
 
 class LocalizationInferenceScorerBase(ABC):
@@ -53,12 +53,12 @@ class RelativeHausdorffDistanceCDFLocalizationInferenceScorer(LocalizationInfere
         integer_binarized_solution = normalized_binarized_solution * (normalized_binarized_solution > 0).sum()
         actual_subgraph = induced_subgraph(processed_sub_graph.G, integer_binarized_solution)
 
-        hausdorff_relative_distance, shortest_path_distances_from_target = compute_relative_hausdorff_distance_to_target_subgraph(
+        hausdorff_relative_similarity, shortest_path_distances_from_target = compute_relative_hausdorff_similarity_to_target_subgraph(
             processed_sub_graph.G, processed_sub_graph.G_sub, actual_subgraph)
 
-        hausdorff_relative_distance_cdf_scorer = ConnectedInducedSubgraphRelativeHausdorffDistanceCDFScore(
+        hausdorff_relative_similarity_cdf_scorer = ConnectedInducedSubgraphRelativeHausdorffSimilarityCDFScore(
             sub_graph)
-        hausdorff_relative_distance_cdf_score = hausdorff_relative_distance_cdf_scorer.calculate(
-            hausdorff_relative_distance)
+        hausdorff_relative_similarity_cdf_score = hausdorff_relative_similarity_cdf_scorer.calculate(
+            hausdorff_relative_similarity)
 
-        return hausdorff_relative_distance, hausdorff_relative_distance_cdf_score
+        return hausdorff_relative_similarity, hausdorff_relative_similarity_cdf_score

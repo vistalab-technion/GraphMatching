@@ -15,6 +15,7 @@ from subgraph_matching_via_nn.data.data_loaders import load_graph
 from subgraph_matching_via_nn.data.paths import DATA_PATH
 from subgraph_matching_via_nn.evaluation.fullgraph_perturbation_subgraph_detection_analysis import \
     NodesNumberVsSubgraphDetectionAnalysis
+from subgraph_matching_via_nn.evaluation.mask_metrics_constants import MaskMetricsConstants
 from subgraph_matching_via_nn.graph_classifier_networks.node_classifier_network_factory import \
     NodeClassifierNetworkType, NodeClassifierNetworkFactory, NodeClassifierLastLayerType
 from subgraph_matching_via_nn.graph_embedding_networks.graph_embedding_network_factory import \
@@ -246,12 +247,12 @@ if __name__ == "__main__":
                                                                                      sub_graph.G) * full_graph_perturbation_analysis_max_ratio)
 
                     # for debug: perturbation_analysis_results[?]['binarized_solution']
-
-                    # plot_analysis_scores(perturbation_analysis_results, 'f_beta_score', "graph nodes number")
-                    plot_analysis_scores(perturbation_analysis_results, 'is_connected', "graph nodes number")
-                    plot_analysis_scores(perturbation_analysis_results, 'correctly_captured_nodes_number', "graph nodes number")
-                    plot_analysis_scores(perturbation_analysis_results, 'overlap_cdf_score', "graph nodes number")
-                    plot_analysis_scores(perturbation_analysis_results, 'hausdorff_relative_distance', "graph nodes number")
-                    plot_analysis_scores(perturbation_analysis_results, 'hausdorff_relative_distance_cdf_score', "graph nodes number")
+                    x_title = "graph nodes number"
+                    # plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.F_BETA_SCORE_NAME, x_title)
+                    plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.IS_CONNECTED_SCORE_NAME, x_title)
+                    plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.OVERLAP_NODES_SCORE_NAME, x_title)
+                    plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.OVERLAP_NODES_CDF_SCORE_NAME, x_title)
+                    plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_SCORE_NAME, x_title)
+                    plot_analysis_scores(perturbation_analysis_results, MaskMetricsConstants.RELATIVE_HAUSDORFF_SIMILARITY_CDF_SCORE_NAME, x_title)
 
                     #endregion
