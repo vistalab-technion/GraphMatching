@@ -109,7 +109,7 @@ class ConnectedInducedSubgraphCDFScore(ABC):
     def _log_cdf_histogram(self, ordered_cdf_map):
         pass
 
-    def calculate(self, cdf_query_value):
+    def calculate_cdf_histogram(self):
         gt_subgraph = self.sub_graph.G_sub
         graph = self.sub_graph.G
 
@@ -124,6 +124,10 @@ class ConnectedInducedSubgraphCDFScore(ABC):
         # compute CDF score
         ordered_cdf_map = CDFScoreService.calculate_cdf(metric_val_to_num_k_subgraphs_map,
                                                         is_complement=self.is_complement_score)
+        return ordered_cdf_map
+
+    def calculate(self, cdf_query_value):
+        ordered_cdf_map = self.calculate_cdf_histogram()
         self._log_cdf_histogram(ordered_cdf_map)
 
         cdf_score = CDFScoreService.get_cdf_score(ordered_cdf_map, cdf_query_value, is_complement=self.is_complement_score)
