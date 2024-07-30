@@ -159,7 +159,7 @@ def setup_experiment():
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+
 
     # Override the show method to do nothing
     plt.show = lambda: None
