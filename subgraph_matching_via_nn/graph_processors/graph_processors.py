@@ -138,7 +138,7 @@ class GraphProcessor(BaseGraphProcessor):
             #  into account whether w is node mask or edge mask. It will solve
             #  different optimization problem inside.
             selected_nodes, selected_edges = (
-                solve_maximum_weight_subgraph(weights=w,
+                solve_maximum_weight_subgraph(scores=w,
                                               graph=graph,
                                               requested_num_nodes=
                                               params["num_nodes_orig"],

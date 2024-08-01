@@ -144,7 +144,8 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
 
     def spectral_operator(self, A, w):
         v = 1 - self._indicator_scale * w
-
+        x = w / w.norm()
+        v = v - torch.dot(v.squeeze(), x.squeeze()) * x
         if self._spectral_op_type == 'Laplacian':
             H = hamiltonian(A, v, self._diagonal_scale)
         if self._spectral_op_type == 'Adjacency':
@@ -152,7 +153,6 @@ class SpectralEmbeddingNetwork(BaseGraphEmbeddingNetwork):
             H = A - E + self._diagonal_scale * torch.diag(v.squeeze())
         if self._spectral_op_type == 'SquaredProjectedHamiltonian':
             H_unprojected = hamiltonian(A, v, self._diagonal_scale)
-            x = w / w.norm()
             H_projected = H_unprojected @ (torch.eye(H_unprojected.shape[0]) - x @ x.T)
             H = H_projected.T @ H_projected
         return H

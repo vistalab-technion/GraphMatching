@@ -3,7 +3,7 @@ import pulp
 from pulp import PULP_CBC_CMD
 
 
-def solve_maximum_weight_subgraph(weights : dict,
+def solve_maximum_weight_subgraph(scores: dict,
                                   graph: nx.Graph,
                                   requested_num_nodes,
                                   requested_num_edges):
@@ -11,7 +11,7 @@ def solve_maximum_weight_subgraph(weights : dict,
     Solves a maximum weighted subgraph problem. If 'weights' is a node weights vector (i.e.,
     it of size [nodes x 1]), then it solves:
 
-    max_{x,y} weights.T @ x
+    max_{x,y} <scores, x>
 
     s.t.
 
@@ -22,7 +22,7 @@ def solve_maximum_weight_subgraph(weights : dict,
     i.e., it finds the best weighted subset of nodes that correspond to a subgraph with
     requested_num_nodes and requested_num_edges.
 
-    If 'weights' is an edge weight vector (i.e., it of size [edges x 1]), then the objective is
+    If 'scores' is an edge weight vector (i.e., it of size [edges x 1]), then the objective is
 
     max_{x,y} weights.T @ y
 
@@ -40,7 +40,7 @@ def solve_maximum_weight_subgraph(weights : dict,
     k = 3  # Number of nodes in the subgraph
     l = 3  # Number of edges in the subgraph
 
-    selected_nodes, selected_edges = solve_maximum_weight_subgraph(weights,
+    selected_nodes, selected_edges = solve_maximum_weight_subgraph(scores,
                                                                    adjacency_matrix,
                                                                    k,
                                                                    l)
@@ -61,11 +61,10 @@ def solve_maximum_weight_subgraph(weights : dict,
          range(num_nodes) for j in range(i + 1, num_nodes)}
 
     # Objective function
-    if len(weights) == num_nodes:
-        problem += pulp.lpSum(weights[node] * x[node] for node in graph.nodes)
-    elif len(weights) == num_edges:
-        problem += pulp.lpSum(
-            weights[edge] * y[edge] for edge in graph.edges())
+    if len(scores) == num_nodes:
+        problem += pulp.lpSum(scores[node] * x[node] for node in graph.nodes)
+    elif len(scores) == num_edges:
+        problem += pulp.lpSum(scores[edge] * y[edge] for edge in graph.edges())
 
     # Constraints
     problem += pulp.lpSum(x) == requested_num_nodes  # Node selection constraint
@@ -93,7 +92,3 @@ def solve_maximum_weight_subgraph(weights : dict,
 
     # Return the selected nodes and edges
     return selected_nodes, selected_edges
-
-
-def generate_node_optimization_problem():
-    return problem
